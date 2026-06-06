@@ -3,47 +3,56 @@
 </div>
 
 <div align="center">
-    <h1>PiliPala</h1>
-<div align="center">
-    
-![GitHub repo size](https://img.shields.io/github/repo-size/guozhigq/pilipala) 
-![GitHub Repo stars](https://img.shields.io/github/stars/guozhigq/pilipala) 
-![GitHub all releases](https://img.shields.io/github/downloads/guozhigq/pilipala/total) 
-
-</div>
-    <p>使用 Flutter 开发的 BiliBili 第三方客户端</p>
-    
-<img src="https://github.com/guozhigq/pilipala/blob/main/assets/screenshots/510shots_so.png" width="32%" alt="home" />
-<img src="https://github.com/guozhigq/pilipala/blob/main/assets/screenshots/174shots_so.png" width="32%" alt="home" />
-<img src="https://github.com/guozhigq/pilipala/blob/main/assets/screenshots/850shots_so.png" width="32%" alt="home" />
-<br/>
-<img src="https://github.com/guozhigq/pilipala/blob/main/assets/screenshots/main_screen.png" width="96%" alt="home" />
-<br/>
+    <h1>PiliPala HD+</h1>
+    <p>基于 PiliPala 的平板横屏适配版本</p>
 </div>
 
-## 开发环境
+## 改动说明
 
-Xcode 13.4 不支持 ```auto_orientation```，请注释相关代码
+基于 [guozhigq/pilipala](https://github.com/guozhigq/pilipala) v1.0.25 开源代码。
+
+### 平板适配
+- 移除竖屏锁定，允许自由旋转
+- 推荐/直播/番剧等网格页面：根据屏幕宽度动态调整列数
+- 视频详情页：横屏时左右分栏（播放器 + 评论/简介）
+- 设置/登录/关于等窄页面：居中限宽 600px
+- 手势区域自动适配播放器实际宽度
+
+### 网络优化
+- mpv 播放器增加超时、缓存、断线重连参数
+- CDN 规则扩展覆盖 B站原始存储节点
+- 播放缓冲区 5MB → 32MB（直播 64MB）
+- 缓冲不足时自动暂停等待（cache-pause）
+
+### Bug 修复
+- 修复内存泄漏（StreamSubscription 未 cancel）
+- 修复 ScrollController / TabController 未正确释放
+- 修复 build() 中的副作用导致潜在无限循环
+- 修复横屏分栏时 ScrollController 未 attach 崩溃
+- 修复合集面板/评论面板横屏时弹出高度异常
+- 修复 floating (PiP) 双重 dispose 崩溃
+- 修复 episodes 未初始化红屏错误
+- 自定义倍速列表自动排序
+
+### 已知问题
+- >2x 倍速时可能音画不同步（mpv 架构限制：音频永远不等视频）
+- 评论区显示"还没有评论"（B站 API 格式变更，需要更新解析逻辑）
+- 一键三连接口 B 站风控（单独点赞/投币/收藏正常）
+
+## 编译要求
+
+- Flutter 3.22.3（不支持 3.41+）
+- JDK 17（`gradle.properties` 中配置 `org.gradle.java.home`）
+- Android SDK Build Tools 34.0.0+
+- 需删除损坏的 Build Tools 30.0.3（如有）
+
+## 编译命令
 
 ```bash
-[✓] Flutter (Channel stable, 3.19.6, on macOS 14.1.2 23B92 darwin-arm64, locale
-    zh-Hans-CN)
-[✓] Android toolchain - develop for Android devices (Android SDK version 34.0.0)
-[✓] Xcode - develop for iOS and macOS (Xcode 15.1)
-[✓] Chrome - develop for the web
-[✓] Android Studio (version 2022.3)
-[✓] VS Code (version 1.87.2)
-[✓] Connected device (3 available)
-[✓] Network resources
+flutter build apk --release
 ```
 
-## 技术交流
-
-Telegram: [https://t.me/+1DFtqS6usUM5MDNl](https://t.me/+1DFtqS6usUM5MDNl)
-
-Telegram Beta 版本：@PiliPala_Beta
-
-QQ 频道: https://pd.qq.com/s/365esodk3
+APK 输出：`build/app/outputs/flutter-apk/app-release.apk`
 
 ## 功能
 

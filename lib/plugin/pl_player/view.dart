@@ -579,7 +579,11 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
           top: 25,
           right: 15,
           bottom: 15,
-          child: GestureDetector(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final double playerWidth = constraints.maxWidth;
+              final double playerHeight = constraints.maxHeight;
+              return GestureDetector(
             onTap: () {
               _.controls = !_.showControls.value;
             },
@@ -588,7 +592,7 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
               if (_.videoType == 'live' || _.controlsLock.value) {
                 return;
               }
-              final double totalWidth = MediaQuery.sizeOf(context).width;
+              final double totalWidth = playerWidth;
               final double tapPosition = details.localPosition.dx;
               final double sectionWidth = totalWidth / 3;
               String type = 'left';
@@ -618,7 +622,7 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
               // final double tapPosition = details.localPosition.dx;
               final int curSliderPosition =
                   _.sliderPosition.value.inMilliseconds;
-              final double scale = 90000 / MediaQuery.sizeOf(context).width;
+              final double scale = 90000 / playerWidth;
               final Duration pos = Duration(
                   milliseconds:
                       curSliderPosition + (details.delta.dx * scale).round());
@@ -636,7 +640,7 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
             },
             // 垂直方向 音量/亮度调节
             onVerticalDragUpdate: (DragUpdateDetails details) async {
-              final double totalWidth = MediaQuery.sizeOf(context).width;
+              final double totalWidth = playerWidth;
               final double tapPosition = details.localPosition.dx;
               final double sectionWidth = totalWidth / 3;
               final double delta = details.delta.dy;
@@ -654,7 +658,7 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
                 // 左边区域 👈
                 final double level = (_.isFullScreen.value
                         ? Get.size.height
-                        : screenWidth * 9 / 16) *
+                        : playerHeight) *
                     3;
                 final double brightness =
                     _brightnessValue.value - delta / level;
@@ -692,7 +696,7 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
                     'setVolume', const Duration(milliseconds: 20), () {
                   final double level = (_.isFullScreen.value
                       ? Get.size.height
-                      : screenWidth * 9 / 16);
+                      : playerHeight);
                   final double volume = _volumeValue.value -
                       double.parse(delta.toStringAsFixed(1)) / level;
                   final double result = volume.clamp(0.0, 1.0);
@@ -701,6 +705,8 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
               }
             },
             onVerticalDragEnd: (DragEndDetails details) {},
+          );
+            },
           ),
         ),
 

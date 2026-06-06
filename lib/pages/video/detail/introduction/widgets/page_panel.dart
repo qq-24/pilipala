@@ -28,7 +28,7 @@ class PagesPanel extends StatefulWidget {
 }
 
 class _PagesPanelState extends State<PagesPanel> {
-  late List<Part> episodes;
+  List<Part> episodes = [];
   late int cid;
   late RxInt currentIndex = (-1).obs;
   final String heroTag = Get.arguments['heroTag'];

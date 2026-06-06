@@ -262,10 +262,11 @@ class BangumiIntroController extends GetxController {
 
   /// 列表循环或者顺序播放时，自动播放下一个
   void nextPlay() {
-    late List episodes;
-    if (bangumiDetail.value.episodes != null) {
-      episodes = bangumiDetail.value.episodes!;
+    if (bangumiDetail.value.episodes == null ||
+        bangumiDetail.value.episodes!.isEmpty) {
+      return;
     }
+    List episodes = bangumiDetail.value.episodes!;
     VideoDetailController videoDetailCtr =
         Get.find<VideoDetailController>(tag: Get.arguments['heroTag']);
     int currentIndex =
@@ -290,7 +291,7 @@ class BangumiIntroController extends GetxController {
 
   // 播放器底栏 选集 回调
   void showEposideHandler() {
-    late List episodes = bangumiDetail.value.episodes!;
+    List episodes = bangumiDetail.value.episodes ?? [];
     VideoEpidoesType dataType = VideoEpidoesType.bangumiEpisode;
     if (episodes.isEmpty) {
       return;

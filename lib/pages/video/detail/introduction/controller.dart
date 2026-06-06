@@ -576,7 +576,7 @@ class VideoIntroController extends GetxController {
 
   // 播放器底栏 选集 回调
   void showEposideHandler() {
-    late List episodes;
+    List episodes = [];
     VideoEpidoesType dataType = VideoEpidoesType.videoEpisode;
     if (videoDetail.value.ugcSeason != null) {
       dataType = VideoEpidoesType.videoEpisode;

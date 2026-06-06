@@ -100,6 +100,7 @@ class GlobalDataCache {
     final List<double> playSpeedSystem = await videoStorage
         .get(VideoBoxKey.playSpeedSystem, defaultValue: playSpeed);
     speedsList.addAll(playSpeedSystem);
+    speedsList = speedsList.toSet().toList()..sort();
 
     userInfo = userInfoCache.get('userInfoCache');
   }

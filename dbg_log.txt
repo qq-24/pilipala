@@ -1,0 +1,34 @@
+
+Running Gradle task 'assembleDebug'...                          
+You are applying Flutter's app_plugin_loader Gradle plugin imperatively using the apply script method, which is deprecated and will be removed in a future release. Migrate to applying Gradle plugins with the declarative plugins block: https://flutter.dev/go/flutter-gradle-plugin-apply
+
+You are applying Flutter's main Gradle plugin imperatively using the apply script method, which is deprecated and will be removed in a future release. Migrate to applying Gradle plugins with the declarative plugins block: https://flutter.dev/go/flutter-gradle-plugin-apply
+
+Both settings.gradle and settings.gradle.kts exist, so settings.gradle.kts is ignored. This is likely a mistake.
+Warning: The plugin media_kit_libs_android_video requires Android SDK version 36 or higher.
+For more information about build configuration, see https://docs.flutter.dev/deployment/android#reviewing-the-gradle-build-configuration.
+One or more plugins require a higher Android SDK version.
+Fix this issue by adding the following to D:\mingh\Documents\pilipala-hd-plus\android\app\build.gradle:
+android {
+  compileSdkVersion 36
+  ...
+}
+
+��������: ����·����������·�����Ҳ�������� java.lang
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':media_kit_libs_android_video:compileDebugJavaWithJavac'.
+> Compilation failed; see the compiler error output for details.
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights.
+
+* Get more help at https://help.gradle.org
+
+BUILD FAILED in 20s
+Running Gradle task 'assembleDebug'...                             21.0s
+Gradle task assembleDebug failed with exit code 1

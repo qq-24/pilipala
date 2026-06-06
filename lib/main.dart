@@ -222,6 +222,7 @@ class BuildMainApp extends StatelessWidget {
     );
 
     return GetMaterialApp(
+      debugShowCheckedModeBanner: false,
       title: 'PiliPala',
       theme: ThemeData(
         colorScheme: currentThemeValue == ThemeType.dark

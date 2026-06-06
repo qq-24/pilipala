@@ -27,7 +27,7 @@ class SeasonPanel extends StatefulWidget {
 }
 
 class _SeasonPanelState extends State<SeasonPanel> {
-  late List<EpisodeItem> episodes;
+  List<EpisodeItem> episodes = [];
   late int cid;
   late RxInt currentIndex = (-1).obs;
   final String heroTag = Get.arguments['heroTag'];
@@ -146,7 +146,9 @@ class _SeasonPanelState extends State<SeasonPanel> {
                   ),
                   const SizedBox(width: 10),
                   Obx(() => Text(
-                        '${currentIndex.value + 1}/${episodes.length}',
+                        episodes.isEmpty
+                            ? ''
+                            : '${currentIndex.value < 0 ? 1 : currentIndex.value + 1}/${episodes.length}',
                         style: Theme.of(context).textTheme.labelMedium,
                       )),
                   const SizedBox(width: 6),

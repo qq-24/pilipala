@@ -17,6 +17,7 @@ import 'package:pilipala/models/video/play/url.dart';
 import 'package:pilipala/models/video/reply/item.dart';
 import 'package:pilipala/pages/video/detail/reply_reply/index.dart';
 import 'package:pilipala/plugin/pl_player/index.dart';
+import 'package:pilipala/utils/dash_mpd.dart';
 import 'package:pilipala/utils/storage.dart';
 import 'package:pilipala/utils/utils.dart';
 import 'package:pilipala/utils/video_utils.dart';
@@ -83,7 +84,7 @@ class VideoDetailController extends GetxController
   PlPlayerController plPlayerController = PlPlayerController();
 
   late VideoItem firstVideo;
-  late AudioItem firstAudio;
+  AudioItem? firstAudio;
   late String videoUrl;
   late String audioUrl;
   late Duration defaultST;
@@ -114,6 +115,13 @@ class VideoDetailController extends GetxController
     BottomControlType.fullscreen,
   ].obs;
   RxDouble sheetHeight = 0.0.obs;
+  double get effectiveSheetHeight {
+    final ctx = Get.context;
+    if (ctx != null && MediaQuery.of(ctx).orientation == Orientation.landscape) {
+      return Get.size.height * 0.7;
+    }
+    return sheetHeight.value > 100 ? sheetHeight.value : Get.size.height * 0.6;
+  }
   RxString archiveSourceType = 'dash'.obs;
   ScrollController? replyScrollController;
   List<MediaVideoItemModel> mediaList = <MediaVideoItemModel>[];
@@ -194,7 +202,7 @@ class VideoDetailController extends GetxController
         firstFloor: firstFloor,
         replyType: ReplyType.video,
         source: 'videoDetail',
-        sheetHeight: sheetHeight.value,
+        sheetHeight: effectiveSheetHeight,
         currentReply: currentReply,
         loadMore: loadMore,
       );
@@ -259,16 +267,49 @@ class VideoDetailController extends GetxController
     duration,
     bool? autoplay,
   }) async {
+    print('[PLAY] playerInit called, archiveSourceType: ${archiveSourceType.value}');
     /// 设置/恢复 屏幕亮度
     if (brightness != null) {
       ScreenBrightness().setScreenBrightness(brightness!);
     } else {
       ScreenBrightness().resetScreenBrightness();
     }
+    String effectiveVideoSource = video ?? videoUrl;
+    String effectiveAudioSource = audio ?? audioUrl;
+
+    // DASH MPD 暂时禁用（调试中），使用 audio-files 方式
+    if (false && archiveSourceType.value == 'dash' && effectiveAudioSource.isNotEmpty) {
+      try {
+        print('[PLAY] generating MPD...');
+        effectiveVideoSource = await generateDashMpd(
+          videoUrl: effectiveVideoSource,
+          audioUrl: effectiveAudioSource,
+          durationMs: data.timeLength ?? 0,
+          videoMimeType: firstVideo.mimeType,
+          videoCodecs: firstVideo.codecs,
+          videoBandwidth: firstVideo.bandWidth,
+          videoWidth: firstVideo.width,
+          videoHeight: firstVideo.height,
+          videoFrameRate: firstVideo.frameRate,
+          videoSegmentBase: firstVideo.segmentBase,
+          audioMimeType: firstAudio?.mimeType,
+          audioCodecs: firstAudio?.codecs,
+          audioBandwidth: firstAudio?.bandWidth,
+          audioSegmentBase: firstAudio?.segmentBase,
+        );
+        effectiveAudioSource = ''; // MPD 已包含音频，不需要外挂
+        print('[PLAY] MPD generated: $effectiveVideoSource');
+      } catch (e) {
+        // MPD 生成失败时 fallback 到原来的 audio-files 方式
+        print('[PLAY] MPD FAILED: $e, falling back to audio-files');
+      }
+    }
+
+    print('[PLAY] setDataSource: video=${effectiveVideoSource.substring(0, effectiveVideoSource.length < 80 ? effectiveVideoSource.length : 80)}... audio=${effectiveAudioSource.isEmpty ? "EMPTY" : effectiveAudioSource.substring(0, effectiveAudioSource.length < 60 ? effectiveAudioSource.length : 60)}...');
     await plPlayerController.setDataSource(
       DataSource(
-        videoSource: video ?? videoUrl,
-        audioSource: audio ?? audioUrl,
+        videoSource: effectiveVideoSource,
+        audioSource: effectiveAudioSource,
         type: DataSourceType.network,
         httpHeaders: {
           'user-agent':
@@ -301,8 +342,10 @@ class VideoDetailController extends GetxController
 
   // 视频链接
   Future queryVideoUrl() async {
+    print('[PLAY] queryVideoUrl start: bvid=$bvid cid=${cid.value}');
     var result =
         await VideoHttp.videoUrl(cid: cid.value, bvid: bvid, qn: cacheVideoQa);
+    print('[PLAY] queryVideoUrl result status: ${result["status"]}');
     if (result['status']) {
       data = result['data'];
       if (data.acceptDesc!.isNotEmpty && data.acceptDesc!.contains('试看')) {
@@ -336,6 +379,7 @@ class VideoDetailController extends GetxController
       final List<VideoItem> allVideosList = data.dash!.video!;
       try {
         archiveSourceType.value = 'dash';
+        print('[PLAY] archiveSourceType: ${archiveSourceType.value}');
         // 当前可播放的最高质量视频
         int currentHighVideoQa = allVideosList.first.quality!.code;
         // 预设的画质为null，则当前可用的最高质量
@@ -391,7 +435,7 @@ class VideoDetailController extends GetxController
       }
 
       /// 优先顺序 设置中指定质量 -> 当前可选的最高质量
-      late AudioItem? firstAudio;
+      AudioItem? firstAudio;
       final List<AudioItem> audiosList = data.dash!.audio!;
 
       try {
@@ -421,9 +465,12 @@ class VideoDetailController extends GetxController
         SmartDialog.showToast('firstAudio error: $err');
       }
 
+      this.firstAudio = firstAudio;
       audioUrl = enableCDN
           ? VideoUtils.getCdnUrl(firstAudio)
           : (firstAudio.backupUrl ?? firstAudio.baseUrl!);
+      print('[PLAY] videoUrl: ${videoUrl.substring(0, videoUrl.length < 80 ? videoUrl.length : 80)}...');
+      print('[PLAY] audioUrl: ${audioUrl.substring(0, audioUrl.length < 80 ? audioUrl.length : 80)}...');
       //
       if (firstAudio.id != null) {
         currentAudioQa = AudioQualityCode.fromCode(firstAudio.id!)!;
@@ -609,7 +656,7 @@ class VideoDetailController extends GetxController
     replyReplyBottomSheetCtr =
         scaffoldKey.currentState?.showBottomSheet((BuildContext context) {
       return MediaListPanel(
-        sheetHeight: sheetHeight.value,
+        sheetHeight: effectiveSheetHeight,
         mediaList: mediaList,
         changeMediaList: changeMediaList,
         panelTitle: watchLaterTitle.value,

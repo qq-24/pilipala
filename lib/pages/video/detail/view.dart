@@ -177,8 +177,10 @@ class _VideoDetailPageState extends State<VideoDetailPage>
 
   // 继续播放或重新播放
   void continuePlay() async {
-    await _extendNestCtr.animateTo(0,
-        duration: const Duration(milliseconds: 500), curve: Curves.easeInOut);
+    if (_extendNestCtr.hasClients) {
+      await _extendNestCtr.animateTo(0,
+          duration: const Duration(milliseconds: 500), curve: Curves.easeInOut);
+    }
     plPlayerController!.play();
   }
 
@@ -191,6 +193,7 @@ class _VideoDetailPageState extends State<VideoDetailPage>
     vdCtr.isShowCover.value = false;
     isShowing.value = true;
     autoEnterPip(status: PlayerStatus.playing);
+    fullScreenStatusListener();
   }
 
   void fullScreenStatusListener() {
@@ -234,9 +237,6 @@ class _VideoDetailPageState extends State<VideoDetailPage>
     if (plPlayerController != null) {
       plPlayerController!.removeStatusLister(playerListener);
       plPlayerController!.dispose();
-    }
-    if (vdCtr.floating != null) {
-      vdCtr.floating!.dispose();
     }
     videoPlayerServiceHandler.onVideoDetailDispose();
     if (Platform.isAndroid) {
@@ -297,7 +297,7 @@ class _VideoDetailPageState extends State<VideoDetailPage>
     /// 未开启自动播放时，未播放跳转下一页返回/播放后跳转下一页返回
     vdCtr.autoPlay.value = !vdCtr.isShowCover.value;
     videoIntroController.isPaused = false;
-    if (_extendNestCtr.position.pixels == 0 && autoplay) {
+    if (_extendNestCtr.hasClients && _extendNestCtr.position.pixels == 0 && autoplay) {
       await Future.delayed(const Duration(milliseconds: 300));
       plPlayerController?.seekTo(vdCtr.defaultST);
       plPlayerController?.play();

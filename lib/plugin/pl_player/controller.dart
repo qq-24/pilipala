@@ -341,6 +341,7 @@ class PlPlayerController {
     bool enableSubTitle = false,
   }) async {
     try {
+      print('[PLAYER] setDataSource: ${dataSource.videoSource?.substring(0, (dataSource.videoSource?.length ?? 0) < 80 ? dataSource.videoSource?.length ?? 0 : 80)}');
       _autoPlay = autoplay;
       _looping = looping;
       // 初始化视频倍速
@@ -429,6 +430,9 @@ class PlPlayerController {
         "reconnect=1,reconnect_streamed=1,reconnect_delay_max=5");
     // 解除倍速限制
     await pp.setProperty("af", "scaletempo2=max-speed=8");
+    // 缓冲不足时暂停等待，保证音画同步
+    await pp.setProperty("cache-pause", "yes");
+    await pp.setProperty("cache-pause-wait", "1");
     //  音量不一致
     if (Platform.isAndroid) {
       await pp.setProperty("volume-max", "100");
@@ -445,8 +449,16 @@ class PlPlayerController {
       AudioTrack.auto(),
     );
 
+    // 当使用 MPD 时，通过 mpv 属性设置 HTTP headers（MPD 内的 URL 不走 media_kit 的 httpHeaders）
+    if (dataSource.videoSource!.endsWith('.mpd')) {
+      print('[PLAYER] http-header-fields set for MPD');
+      await pp.setProperty('http-header-fields',
+          'User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 13_3_1) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.4 Safari/605.1.15\r\nReferer: https://www.bilibili.com/');
+    }
+
     // 音轨
     if (dataSource.audioSource != '' && dataSource.audioSource != null) {
+      print('[PLAYER] audio-files: ${dataSource.audioSource?.substring(0, (dataSource.audioSource?.length ?? 0) < 80 ? dataSource.audioSource?.length ?? 0 : 80)}');
       await pp.setProperty(
         'audio-files',
         UniversalPlatform.isWindows
@@ -493,11 +505,13 @@ class PlPlayerController {
         play: false,
       );
     }
+    print('[PLAYER] player.open: ${dataSource.videoSource?.substring(0, (dataSource.videoSource?.length ?? 0) < 80 ? dataSource.videoSource?.length ?? 0 : 80)}');
     await player.open(
       Media(dataSource.videoSource!,
           httpHeaders: dataSource.httpHeaders, start: seekTo),
       play: false,
     );
+    print('[PLAYER] player.open done');
     // 音轨
     // player.setAudioTrack(
     //   AudioTrack.uri(dataSource.audioSource!),
