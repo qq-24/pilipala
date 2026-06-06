@@ -3,6 +3,7 @@ import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:get/get.dart';
 import 'package:pilipala/common/constants.dart';
 import 'package:pilipala/common/widgets/network_img_layer.dart';
+import 'package:pilipala/utils/adaptive.dart';
 import 'package:pilipala/utils/image_save.dart';
 import 'package:pilipala/utils/utils.dart';
 
@@ -14,11 +15,11 @@ Widget searchLivePanel(BuildContext context, ctr, list) {
       primary: false,
       controller: ctr!.scrollController,
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2,
+          crossAxisCount: responsiveCrossAxisCount(context),
           crossAxisSpacing: StyleString.cardSpace + 2,
           mainAxisSpacing: StyleString.cardSpace + 3,
           mainAxisExtent:
-              MediaQuery.sizeOf(context).width / 2 / StyleString.aspectRatio +
+              MediaQuery.sizeOf(context).width / responsiveCrossAxisCount(context) / StyleString.aspectRatio +
                   MediaQuery.textScalerOf(context).scale(66.0)),
       itemCount: list.length,
       itemBuilder: (context, index) {

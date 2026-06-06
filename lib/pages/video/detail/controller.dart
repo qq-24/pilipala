@@ -203,9 +203,7 @@ class VideoDetailController extends GetxController
       watchLaterCount.value = argMap['count'];
       queryArchiveVideoList();
     }
-    tabCtr.addListener(() {
-      onTabChanged();
-    });
+    tabCtr.addListener(onTabChanged);
 
     /// 仅投稿视频skip
     if (videoType == SearchType.video && GlobalDataCache.enableSponsorBlock) {
@@ -787,8 +785,8 @@ class VideoDetailController extends GetxController
   @override
   void onClose() {
     super.onClose();
-    tabCtr.removeListener(() {
-      onTabChanged();
-    });
+    plPlayerController.dispose();
+    tabCtr.removeListener(onTabChanged);
+    tabCtr.dispose();
   }
 }

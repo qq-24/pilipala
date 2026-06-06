@@ -7,6 +7,7 @@ import 'package:pilipala/models/common/theme_type.dart';
 import 'package:pilipala/models/user/fav_folder.dart';
 import 'package:pilipala/models/user/info.dart';
 import 'package:pilipala/models/user/stat.dart';
+import 'package:pilipala/utils/adaptive.dart';
 import 'package:pilipala/utils/utils.dart';
 import 'controller.dart';
 
@@ -64,7 +65,7 @@ class _MinePageState extends State<MinePage>
           const SizedBox(width: 22),
         ],
       ),
-      body: RefreshIndicator(
+      body: AdaptiveContainer(child: RefreshIndicator(
         onRefresh: () async {
           await ctr.queryUserInfo();
         },
@@ -128,7 +129,7 @@ class _MinePageState extends State<MinePage>
             ),
           ),
         ),
-      ),
+      )),
     );
   }
 

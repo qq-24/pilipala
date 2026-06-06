@@ -4,6 +4,7 @@ import 'package:get/get.dart';
 import 'package:pilipala/common/constants.dart';
 import 'package:pilipala/common/skeleton/video_card_h.dart';
 import 'package:pilipala/common/widgets/http_error.dart';
+import 'package:pilipala/utils/adaptive.dart';
 import 'controller.dart';
 import 'widgets/item.dart';
 
@@ -65,8 +66,8 @@ class _MemberSeasonsPageState extends State<MemberSeasonsPage> {
                               builder: (context, boxConstraints) {
                                 return GridView.builder(
                                   gridDelegate:
-                                      const SliverGridDelegateWithFixedCrossAxisCount(
-                                    crossAxisCount: 2,
+                                      SliverGridDelegateWithFixedCrossAxisCount(
+                                    crossAxisCount: responsiveCrossAxisCount(context),
                                     crossAxisSpacing: StyleString.safeSpace,
                                     mainAxisSpacing: StyleString.safeSpace,
                                     childAspectRatio: 0.94,

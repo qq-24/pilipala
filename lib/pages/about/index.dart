@@ -6,6 +6,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:pilipala/http/index.dart';
 import 'package:pilipala/models/github/latest.dart';
 import 'package:pilipala/plugin/pl_gallery/index.dart';
+import 'package:pilipala/utils/adaptive.dart';
 import 'package:pilipala/utils/utils.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../utils/cache_manage.dart';
@@ -40,7 +41,7 @@ class _AboutPageState extends State<AboutPage> {
         TextStyle(fontSize: 13, color: Theme.of(context).colorScheme.outline);
     return Scaffold(
       appBar: AppBar(title: const Text('关于')),
-      body: SingleChildScrollView(
+      body: AdaptiveContainer(child: SingleChildScrollView(
         child: Column(
           children: [
             Image.asset(
@@ -208,7 +209,7 @@ class _AboutPageState extends State<AboutPage> {
             SizedBox(height: MediaQuery.of(context).padding.bottom + 20)
           ],
         ),
-      ),
+      )),
     );
   }
 }

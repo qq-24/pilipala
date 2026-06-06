@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:pilipala/common/constants.dart';
 import 'package:pilipala/models/member/coin.dart';
 import 'package:pilipala/pages/member_coin/widgets/item.dart';
+import 'package:pilipala/utils/adaptive.dart';
 
 class MemberCoinsPanel extends StatelessWidget {
   final List<MemberCoinsDataModel> data;
@@ -12,8 +13,8 @@ class MemberCoinsPanel extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, boxConstraints) {
         return GridView.builder(
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 2, // Use a fixed count for GridView
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: responsiveCrossAxisCount(context),
             crossAxisSpacing: StyleString.safeSpace,
             mainAxisSpacing: StyleString.safeSpace,
             childAspectRatio: 0.94,

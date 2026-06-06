@@ -38,7 +38,8 @@ def _keyPassword = System.getenv("KEY_PASSWORD") ?: keystoreProperties["keyPassw
 android {
     namespace "com.guozhigq.pilipala"
     compileSdkVersion flutter.compileSdkVersion
-    ndkVersion "27.0.12077973"
+    buildToolsVersion "34.0.0"
+    ndkVersion flutter.ndkVersion
 
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_1_8
@@ -61,7 +62,7 @@ android {
         targetSdkVersion flutter.targetSdkVersion
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName
-        minSdkVersion 21
+        minSdkVersion flutter.minSdkVersion
         multiDexEnabled true
     }
 

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:pilipala/utils/adaptive.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import 'controller.dart';
@@ -197,7 +198,7 @@ class _LoginPageState extends State<LoginPage> {
           const SizedBox(width: 22),
         ],
       ),
-      body: PageView(
+      body: AdaptiveContainer(child: PageView(
         physics: const NeverScrollableScrollPhysics(),
         controller: _loginPageCtr.pageViewController,
         onPageChanged: (int index) => _loginPageCtr.onPageChange(index),
@@ -512,7 +513,7 @@ class _LoginPageState extends State<LoginPage> {
             ),
           ),
         ],
-      ),
+      )),
     );
   }
 }

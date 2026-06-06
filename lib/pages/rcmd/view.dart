@@ -7,6 +7,7 @@ import 'package:pilipala/common/constants.dart';
 import 'package:pilipala/common/skeleton/video_card_v.dart';
 import 'package:pilipala/common/widgets/http_error.dart';
 import 'package:pilipala/common/widgets/video_card_v.dart';
+import 'package:pilipala/utils/adaptive.dart';
 import 'package:pilipala/utils/main_stream.dart';
 
 import 'controller.dart';
@@ -125,7 +126,7 @@ class _RcmdPageState extends State<RcmdPage>
     // if (maxWidth < 300) {
     //   crossAxisCount = 1;
     // }
-    int crossAxisCount = ctr.crossAxisCount.value;
+    int crossAxisCount = responsiveCrossAxisCount(context, baseCount: ctr.crossAxisCount.value);
     double mainAxisExtent = (Get.size.width /
             crossAxisCount /
             StyleString.aspectRatio) +
