@@ -414,11 +414,19 @@ class PlPlayerController {
           configuration: PlayerConfiguration(
             // 默认缓存 5M 大小
             bufferSize:
-                videoType == 'live' ? 32 * 1024 * 1024 : 5 * 1024 * 1024,
+                videoType == 'live' ? 64 * 1024 * 1024 : 32 * 1024 * 1024,
           ),
         );
 
     var pp = player.platform as NativePlayer;
+    // 网络稳定性：超时、缓存、断线重连
+    await pp.setProperty("network-timeout", "30");
+    await pp.setProperty("demuxer-max-bytes", "50MiB");
+    await pp.setProperty("demuxer-max-back-bytes", "10MiB");
+    await pp.setProperty("cache", "yes");
+    await pp.setProperty("cache-secs", "30");
+    await pp.setProperty("stream-lavf-o",
+        "reconnect=1,reconnect_streamed=1,reconnect_delay_max=5");
     // 解除倍速限制
     await pp.setProperty("af", "scaletempo2=max-speed=8");
     //  音量不一致

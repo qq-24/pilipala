@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:pilipala/utils/adaptive.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:get/get.dart';
 import 'package:hive/hive.dart';
@@ -57,7 +58,7 @@ class _StyleSettingState extends State<StyleSetting> {
           style: Theme.of(context).textTheme.titleMedium,
         ),
       ),
-      body: ListView(
+      body: AdaptiveContainer(child: ListView(
         children: [
           Obx(
             () => ListTile(
@@ -301,7 +302,7 @@ class _StyleSettingState extends State<StyleSetting> {
               title: Text('屏幕帧率', style: titleStyle),
             ),
         ],
-      ),
+      )),
     );
   }
 }

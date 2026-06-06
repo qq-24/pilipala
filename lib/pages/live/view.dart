@@ -8,6 +8,7 @@ import 'package:pilipala/common/skeleton/video_card_v.dart';
 import 'package:pilipala/common/widgets/http_error.dart';
 import 'package:pilipala/common/widgets/network_img_layer.dart';
 import 'package:pilipala/models/live/follow.dart';
+import 'package:pilipala/utils/adaptive.dart';
 import 'package:pilipala/utils/main_stream.dart';
 
 import 'controller.dart';
@@ -124,7 +125,7 @@ class _LivePageState extends State<LivePage>
     // if (maxWidth < 300) {
     //   crossAxisCount = 1;
     // }
-    int crossAxisCount = ctr.crossAxisCount.value;
+    int crossAxisCount = responsiveCrossAxisCount(context, baseCount: ctr.crossAxisCount.value);
     return SliverGrid(
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
         // 行间距

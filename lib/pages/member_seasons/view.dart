@@ -2,6 +2,7 @@ import 'package:easy_debounce/easy_throttle.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:pilipala/common/constants.dart';
+import 'package:pilipala/utils/adaptive.dart';
 import 'controller.dart';
 import 'widgets/item.dart';
 
@@ -70,8 +71,8 @@ class _MemberSeasonsPageState extends State<MemberSeasonsPage> {
                               builder: (context, boxConstraints) {
                                 return GridView.builder(
                                   gridDelegate:
-                                      const SliverGridDelegateWithFixedCrossAxisCount(
-                                    crossAxisCount: 2,
+                                      SliverGridDelegateWithFixedCrossAxisCount(
+                                    crossAxisCount: responsiveCrossAxisCount(context),
                                     crossAxisSpacing: StyleString.safeSpace,
                                     mainAxisSpacing: StyleString.safeSpace,
                                     childAspectRatio: 0.94,

@@ -4,6 +4,7 @@ import 'package:pilipala/common/constants.dart';
 import 'package:pilipala/common/widgets/badge.dart';
 import 'package:pilipala/models/member/seasons.dart';
 import 'package:pilipala/pages/member_seasons/widgets/item.dart';
+import 'package:pilipala/utils/adaptive.dart';
 
 class MemberSeasonsPanel extends StatelessWidget {
   final MemberSeasonsDataModel? data;
@@ -73,8 +74,8 @@ class MemberSeasonsPanel extends StatelessWidget {
                   builder: (context, boxConstraints) {
                     return GridView.builder(
                       gridDelegate:
-                          const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 2, // Use a fixed count for GridView
+                          SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: responsiveCrossAxisCount(context),
                         crossAxisSpacing: StyleString.safeSpace,
                         mainAxisSpacing: StyleString.safeSpace,
                         childAspectRatio: 0.94,

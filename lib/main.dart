@@ -30,8 +30,8 @@ import './services/loggeer.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   MediaKit.ensureInitialized();
-  await SystemChrome.setPreferredOrientations(
-      [DeviceOrientation.portraitUp, DeviceOrientation.portraitDown]);
+  // 不锁定方向，允许平板横屏
+  await SystemChrome.setPreferredOrientations([]);
   await GStrorage.init();
   clearLogs();
   Request();

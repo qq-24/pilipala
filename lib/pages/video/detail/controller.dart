@@ -179,9 +179,7 @@ class VideoDetailController extends GetxController
       watchLaterTitle.value = argMap['favTitle'];
       queryFavVideoList();
     }
-    tabCtr.addListener(() {
-      onTabChanged();
-    });
+    tabCtr.addListener(onTabChanged);
   }
 
   showReplyReplyPanel(oid, fRpid, firstFloor, currentReply, loadMore) {
@@ -676,8 +674,7 @@ class VideoDetailController extends GetxController
   void onClose() {
     super.onClose();
     plPlayerController.dispose();
-    tabCtr.removeListener(() {
-      onTabChanged();
-    });
+    tabCtr.removeListener(onTabChanged);
+    tabCtr.dispose();
   }
 }

@@ -38,6 +38,11 @@ class VideoUtils {
       var cdn = cdnList['ali'] ?? "";
       var reg = RegExp(r'(http|https)://(.*?)/upgcxcode/');
       videoUrl = videoUrl.replaceAll(reg, "https://$cdn/upgcxcode/");
+    } else if (RegExp(r'upos-sz-est').hasMatch(videoUrl)) {
+      // 原始存储节点（estgoss等）DNS不稳定，替换为CDN镜像
+      var reg = RegExp(r'(http|https)://upos-sz-est[^/]*\.bilivideo\.com');
+      videoUrl = videoUrl.replaceAll(
+          reg, "https://upos-sz-mirrorali.bilivideo.com");
     }
 
     return videoUrl;

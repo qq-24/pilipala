@@ -7,6 +7,7 @@ import 'package:pilipala/common/constants.dart';
 import 'package:pilipala/common/widgets/network_img_layer.dart';
 import 'package:pilipala/models/common/theme_type.dart';
 import 'package:pilipala/models/user/info.dart';
+import 'package:pilipala/utils/adaptive.dart';
 import 'controller.dart';
 
 class MinePage extends StatefulWidget {
@@ -72,7 +73,7 @@ class _MinePageState extends State<MinePage> {
           const SizedBox(width: 10),
         ],
       ),
-      body: LayoutBuilder(
+      body: AdaptiveContainer(child: LayoutBuilder(
         builder: (context, constraint) {
           return SingleChildScrollView(
             physics: const NeverScrollableScrollPhysics(),
@@ -104,7 +105,7 @@ class _MinePageState extends State<MinePage> {
             ),
           );
         },
-      ),
+      )),
     );
   }
 

@@ -69,6 +69,9 @@ class _VideoDetailPageState extends State<VideoDetailPage>
   late final AppLifecycleListener _lifecycleListener;
   late double statusHeight;
 
+  // StreamSubscription 引用（防止内存泄漏）
+  final List<StreamSubscription> _subscriptions = [];
+
   @override
   void initState() {
     super.initState();
@@ -79,18 +82,18 @@ class _VideoDetailPageState extends State<VideoDetailPage>
     videoIntroController = Get.put(
         VideoIntroController(bvid: Get.parameters['bvid']!),
         tag: heroTag);
-    videoIntroController.videoDetail.listen((value) {
+    _subscriptions.add(videoIntroController.videoDetail.listen((value) {
       videoPlayerServiceHandler.onVideoDetailChange(value, vdCtr.cid.value);
-    });
+    }));
     if (vdCtr.videoType == SearchType.media_bangumi) {
       bangumiIntroController = Get.put(BangumiIntroController(), tag: heroTag);
-      bangumiIntroController.bangumiDetail.listen((value) {
+      _subscriptions.add(bangumiIntroController.bangumiDetail.listen((value) {
         videoPlayerServiceHandler.onVideoDetailChange(value, vdCtr.cid.value);
-      });
-      vdCtr.cid.listen((p0) {
+      }));
+      _subscriptions.add(vdCtr.cid.listen((p0) {
         videoPlayerServiceHandler.onVideoDetailChange(
             bangumiIntroController.bangumiDetail.value, p0);
-      });
+      }));
     }
     statusBarHeight = localCache.get('statusBarHeight');
     autoExitFullcreen =
@@ -191,8 +194,9 @@ class _VideoDetailPageState extends State<VideoDetailPage>
   }
 
   void fullScreenStatusListener() {
-    plPlayerController?.isFullScreen.listen((bool isFullScreen) {
+    final sub = plPlayerController?.isFullScreen.listen((bool isFullScreen) {
       if (isFullScreen) {
+        enterFullScreen();
         vdCtr.hiddenReplyReplyPanel();
         if (vdCtr.videoType == SearchType.video) {
           videoIntroController.hiddenEpisodeBottomSheet();
@@ -210,12 +214,14 @@ class _VideoDetailPageState extends State<VideoDetailPage>
           }
         }
       } else {
+        exitFullScreen();
         if (vdCtr.bottomList.contains(BottomControlType.episode)) {
           vdCtr.bottomList.removeAt(3);
         }
       }
       vdCtr.toggeleWatchLaterVisible(!isFullScreen);
     });
+    if (sub != null) _subscriptions.add(sub);
   }
 
   getStatusHeight() async {
@@ -238,6 +244,10 @@ class _VideoDetailPageState extends State<VideoDetailPage>
       floating.dispose();
     }
     appbarStream.close();
+    _extendNestCtr.dispose();
+    for (final sub in _subscriptions) {
+      sub.cancel();
+    }
     WidgetsBinding.instance.removeObserver(this);
     _lifecycleListener.dispose();
     super.dispose();
@@ -491,25 +501,17 @@ class _VideoDetailPageState extends State<VideoDetailPage>
   Widget build(BuildContext context) {
     final sizeContext = MediaQuery.sizeOf(context);
     final _context = MediaQuery.of(context);
-    late double defaultVideoHeight = sizeContext.width * 9 / 16;
-    late RxDouble videoHeight = defaultVideoHeight.obs;
-    final double pinnedHeaderHeight =
-        statusBarHeight + kToolbarHeight + videoHeight.value;
-    // ignore: no_leading_underscores_for_local_identifiers
-
-    // 竖屏
-    final bool isPortrait = _context.orientation == Orientation.portrait;
-    // 横屏
+    final double defaultVideoHeight = sizeContext.width * 9 / 16;
+    // 纯计算，不在 build 中产生副作用
     final bool isLandscape = _context.orientation == Orientation.landscape;
-    final Rx<bool> isFullScreen = plPlayerController?.isFullScreen ?? false.obs;
-    // 全屏时高度撑满
-    if (isLandscape || isFullScreen.value == true) {
-      videoHeight.value = Get.size.height;
-      enterFullScreen();
-    } else {
-      videoHeight.value = defaultVideoHeight;
-      exitFullScreen();
-    }
+    final bool isFullScreen =
+        plPlayerController?.isFullScreen.value == true;
+    final double computedVideoHeight = (isFullScreen || isLandscape)
+        ? sizeContext.height
+        : defaultVideoHeight;
+    late RxDouble videoHeight = computedVideoHeight.obs;
+    final double pinnedHeaderHeight =
+        statusBarHeight + kToolbarHeight + computedVideoHeight;
 
     Widget buildLoadingWidget() {
       return Center(child: Lottie.asset('assets/loading.json', width: 200));
@@ -614,7 +616,73 @@ class _VideoDetailPageState extends State<VideoDetailPage>
                 }),
               ),
             ),
-            body: ExtendedNestedScrollView(
+            body: isLandscape && !isFullScreen
+                ? Row(
+                    children: [
+                      Expanded(
+                        flex: 3,
+                        child: Container(
+                          color: Colors.black,
+                          child: buildVideoPlayerPanel(),
+                        ),
+                      ),
+                      Expanded(
+                        flex: 2,
+                        child: Column(
+                          children: [
+                            tabbarBuild(),
+                            Expanded(
+                              child: TabBarView(
+                                controller: vdCtr.tabCtr,
+                                children: <Widget>[
+                                  Builder(
+                                    builder: (BuildContext context) {
+                                      return CustomScrollView(
+                                        key: const PageStorageKey<String>(
+                                            '简介'),
+                                        slivers: <Widget>[
+                                          if (vdCtr.videoType ==
+                                              SearchType.video) ...[
+                                            VideoIntroPanel(bvid: vdCtr.bvid),
+                                          ] else if (vdCtr.videoType ==
+                                              SearchType.media_bangumi) ...[
+                                            Obx(() => BangumiIntroPanel(
+                                                cid: vdCtr.cid.value)),
+                                          ],
+                                          SliverToBoxAdapter(
+                                            child: Divider(
+                                              indent: 12,
+                                              endIndent: 12,
+                                              color: Theme.of(context)
+                                                  .dividerColor
+                                                  .withOpacity(0.06),
+                                            ),
+                                          ),
+                                          if (vdCtr.videoType ==
+                                                  SearchType.video &&
+                                              vdCtr.enableRelatedVideo)
+                                            const RelatedVideoPanel(),
+                                        ],
+                                      );
+                                    },
+                                  ),
+                                  Obx(
+                                    () => VideoReplyPanel(
+                                      bvid: vdCtr.bvid,
+                                      oid: vdCtr.oid.value,
+                                      onControllerCreated:
+                                          vdCtr.onControllerCreated,
+                                    ),
+                                  )
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  )
+                : ExtendedNestedScrollView(
               controller: _extendNestCtr,
               headerSliverBuilder:
                   (BuildContext context2, bool innerBoxIsScrolled) {
@@ -626,17 +694,18 @@ class _VideoDetailPageState extends State<VideoDetailPage>
                       final bool isFullScreen =
                           plPlayerController?.isFullScreen.value == true;
                       final double expandedHeight =
-                          orientation == Orientation.landscape || isFullScreen
+                          isFullScreen
                               ? (MediaQuery.sizeOf(context).height -
                                   (orientation == Orientation.landscape
                                       ? 0
                                       : MediaQuery.of(context).padding.top))
-                              : videoHeight.value;
-                      if (orientation == Orientation.landscape ||
-                          isFullScreen) {
-                        enterFullScreen();
-                      } else {
-                        exitFullScreen();
+                              : orientation == Orientation.landscape
+                                  ? MediaQuery.sizeOf(context).height
+                                  : videoHeight.value;
+                      if (isFullScreen) {
+                        // 全屏控制已移到 fullScreenStatusListener 中
+                      } else if (orientation != Orientation.landscape) {
+                        // 同上
                       }
                       return SliverAppBar(
                         automaticallyImplyLeading: false,
@@ -702,13 +771,14 @@ class _VideoDetailPageState extends State<VideoDetailPage>
 
               /// 不收回
               pinnedHeaderSliverHeightBuilder: () {
-                return MediaQuery.of(context).orientation ==
-                            Orientation.landscape ||
-                        plPlayerController?.isFullScreen.value == true
+                return plPlayerController?.isFullScreen.value == true
                     ? MediaQuery.sizeOf(context).height
-                    : playerStatus.value != PlayerStatus.playing
-                        ? kToolbarHeight
-                        : pinnedHeaderHeight;
+                    : MediaQuery.of(context).orientation ==
+                            Orientation.landscape
+                        ? MediaQuery.sizeOf(context).height
+                        : playerStatus.value != PlayerStatus.playing
+                            ? kToolbarHeight
+                            : pinnedHeaderHeight;
               },
               onlyOneScrollInBody: true,
               body: Column(

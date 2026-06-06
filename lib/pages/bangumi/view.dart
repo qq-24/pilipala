@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:pilipala/common/constants.dart';
 import 'package:pilipala/common/widgets/http_error.dart';
+import 'package:pilipala/utils/adaptive.dart';
 import 'package:pilipala/utils/main_stream.dart';
 
 import 'controller.dart';
@@ -200,6 +201,7 @@ class _BangumiPageState extends State<BangumiPage>
   }
 
   Widget contentGrid(ctr, bangumiList) {
+    final crossCount = responsiveCrossAxisCount(context, baseCount: 3);
     return SliverGrid(
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
         // 行间距
@@ -207,8 +209,8 @@ class _BangumiPageState extends State<BangumiPage>
         // 列间距
         crossAxisSpacing: StyleString.cardSpace,
         // 列数
-        crossAxisCount: 3,
-        mainAxisExtent: Get.size.width / 3 / 0.75 +
+        crossAxisCount: crossCount,
+        mainAxisExtent: Get.size.width / crossCount / 0.75 +
             MediaQuery.textScalerOf(context).scale(42.0),
       ),
       delegate: SliverChildBuilderDelegate(
