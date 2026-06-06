@@ -27,7 +27,7 @@ class SeasonPanel extends StatefulWidget {
 }
 
 class _SeasonPanelState extends State<SeasonPanel> {
-  List<EpisodeItem>? episodes;
+  List<EpisodeItem> episodes = [];
   late int cid;
   late RxInt currentIndex = (-1).obs;
   final String heroTag = Get.arguments['heroTag'];
@@ -66,9 +66,9 @@ class _SeasonPanelState extends State<SeasonPanel> {
 
   // 获取currentIndex
   void getCurrentIndex() {
-    if (episodes != null) {
+    if (episodes.isNotEmpty) {
       currentIndex.value =
-          episodes!.indexWhere((EpisodeItem e) => e.cid == cid);
+          episodes.indexWhere((EpisodeItem e) => e.cid == cid);
     }
     final List<SectionItem> sections = widget.ugcSeason.sections!;
     if (sections.length == 1 && sections.first.type == 1) {
@@ -147,7 +147,7 @@ class _SeasonPanelState extends State<SeasonPanel> {
               widget.videoIntroCtr.bottomSheetController =
                   _bottomSheetController = EpisodeBottomSheet(
                 currentCid: cid,
-                episodes: episodes!,
+                episodes: episodes,
                 changeFucCall: changeFucCall,
                 sheetHeight: widget.sheetHeight,
                 dataType: VideoEpidoesType.videoEpisode,
@@ -175,7 +175,9 @@ class _SeasonPanelState extends State<SeasonPanel> {
                   ),
                   const SizedBox(width: 10),
                   Obx(() => Text(
-                        '${currentIndex.value + 1}/${episodes!.length}',
+                        episodes.isEmpty
+                            ? ''
+                            : '${currentIndex.value < 0 ? 1 : currentIndex.value + 1}/${episodes.length}',
                         style: Theme.of(context).textTheme.labelMedium,
                       )),
                   const SizedBox(width: 6),

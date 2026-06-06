@@ -33,7 +33,7 @@ class ActionItem extends StatelessWidget {
       },
       borderRadius: StyleString.mdRadius,
       child: SizedBox(
-        width: (Get.size.width - 24) / 5,
+        width: 56,
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
