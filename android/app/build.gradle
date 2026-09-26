@@ -81,7 +81,8 @@ android {
 
     buildTypes {
         release {
-            signingConfig signingConfigs.debug
+            // 优先使用本地 key.properties 的固定发布签名，缺失时回退 debug 签名
+            signingConfig keystorePropertiesFile.exists() ? signingConfigs.release : signingConfigs.debug
         }
     }
 }
