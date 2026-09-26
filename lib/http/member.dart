@@ -410,8 +410,8 @@ class MemberHttp {
   }
 
   // 获取TV authCode
-  static Future getTVCode() async {
-    SmartDialog.showLoading();
+  static Future getTVCode({bool silent = false}) async {
+    if (!silent) SmartDialog.showLoading();
     var params = {
       'appkey': Constants.appKey,
       'local_id': '0',
@@ -439,9 +439,9 @@ class MemberHttp {
     }
   }
 
-  // 获取access_key
-  static Future cookieToKey() async {
-    var authCodeRes = await getTVCode();
+  // 获取access_key（silent=true 用于启动期自动续期，不弹loading）
+  static Future cookieToKey({bool silent = false}) async {
+    var authCodeRes = await getTVCode(silent: silent);
     if (authCodeRes['status']) {
       var res = await Request().post(
         Api.cookieToKey,
@@ -452,8 +452,11 @@ class MemberHttp {
         },
       );
       await Future.delayed(const Duration(milliseconds: 300));
-      await qrcodePoll(authCodeRes['data']);
+      await qrcodePoll(authCodeRes['data'], silent: silent);
       if (res.data['code'] == 0) {
+        if (silent) {
+          SmartDialog.showToast('access_key 已自动续期');
+        }
         return {'status': true, 'data': [], 'msg': '操作成功'};
       } else {
         return {
@@ -465,7 +468,7 @@ class MemberHttp {
     }
   }
 
-  static Future qrcodePoll(authCode) async {
+  static Future qrcodePoll(authCode, {bool silent = false}) async {
     var params = {
       'appkey': Constants.appKey,
       'auth_code': authCode.toString(),
@@ -479,14 +482,19 @@ class MemberHttp {
     );
     var res = await Request()
         .post(Api.qrcodePoll, queryParameters: {...params, 'sign': sign});
-    SmartDialog.dismiss();
+    if (!silent) SmartDialog.dismiss();
     if (res.data['code'] == 0) {
       String accessKey = res.data['data']['access_token'];
       Box localCache = GStorage.localCache;
       Box userInfoCache = GStorage.userInfo;
       final UserInfoData? userInfo = userInfoCache.get('userInfoCache');
-      localCache.put(
-          LocalCacheKey.accessKey, {'mid': userInfo!.mid, 'value': accessKey});
+      localCache.put(LocalCacheKey.accessKey, {
+        'mid': userInfo?.mid,
+        'value': accessKey,
+        // 记录签发时间与有效期，供启动期自动续期判断
+        'ts': DateTime.now().millisecondsSinceEpoch,
+        'expires_in': res.data['data']['expires_in'] ?? 30 * 24 * 3600,
+      });
       return {'status': true, 'data': [], 'msg': '操作成功'};
     } else {
       return {

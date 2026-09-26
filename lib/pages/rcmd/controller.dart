@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:get/get.dart';
 import 'package:hive/hive.dart';
+import 'package:pilipala/http/member.dart';
 import 'package:pilipala/http/video.dart';
 import 'package:pilipala/models/home/rcmd/result.dart';
 import 'package:pilipala/models/model_rec_video_item.dart';
@@ -33,6 +34,35 @@ class RcmdController extends GetxController {
       videoList = <RecVideoItemModel>[].obs;
     } else {
       videoList = <RecVideoItemAppModel>[].obs;
+    }
+    // app端推荐：进入时自动检查并静默续期 access_key，防止token过期退化为游客内容
+    if (defaultRcmdType == 'app') {
+      _ensureFreshAccessKey();
+    }
+  }
+
+  /// token缺失/归属与当前账号不符/剩余有效期不足5天 → 静默换发新token
+  void _ensureFreshAccessKey() async {
+    try {
+      final userInfo = GStorage.userInfo.get('userInfoCache');
+      if (userInfo == null) return; // 未登录不续期
+      final dynamic ak =
+          GStorage.localCache.get(LocalCacheKey.accessKey, defaultValue: null);
+      final int ts = int.tryParse('${ak?['ts'] ?? 0}') ?? 0;
+      final int expiresIn =
+          int.tryParse('${ak?['expires_in'] ?? 0}') ?? (30 * 24 * 3600);
+      final bool needRenew = ak == null ||
+          '${ak['value'] ?? ''}'.isEmpty ||
+          '${ak['mid']}' != '${userInfo.mid}' ||
+          // 旧版本存储没有签发时间，视为需要续期一次
+          ts == 0 ||
+          DateTime.now().millisecondsSinceEpoch - ts >
+              (expiresIn - 5 * 24 * 3600) * 1000;
+      if (needRenew) {
+        await MemberHttp.cookieToKey(silent: true);
+      }
+    } catch (_) {
+      // 静默失败不影响使用，下次启动重试
     }
   }
 
