@@ -122,84 +122,102 @@ class VideoHttp {
   static Future diagnoseAppRcmd() async {
     Future<Map<String, dynamic>> fetchFeed(String accessKey,
         {bool withSign = false}) async {
-      // 随机大数idx，避免命中服务端翻页缓存
-      final int freshIdx =
-          DateTime.now().millisecondsSinceEpoch ~/ 1000 % 100000000;
-      final Map<String, dynamic> params = {
-        'idx': freshIdx,
-        'flush': '5',
-        'column': '4',
-        'device': 'pad',
-        'device_type': 0,
-        'device_name': 'vivo',
-        'pull': 'true',
-        'appkey': Constants.appKey,
-        'access_key': accessKey,
-      };
-      if (withSign) {
-        params['ts'] =
-            (DateTime.now().millisecondsSinceEpoch ~/ 1000).toString();
-        params['sign'] =
-            Utils.appSign(params, Constants.appKey, Constants.appSec);
-      }
-      var res = await Request().get(Api.recommendListApp, data: params);
-      final int code = res.data['code'] ?? -1;
-      if (code != 0) {
-        log('diagnoseAppRcmd error: $code ${res.data['message']}');
-        return {'code': code, 'msg': res.data['message'], 'aids': <int>{}};
-      }
-      final Set<int> aids = {};
-      for (var i in res.data['data']['items']) {
-        final int aid = int.tryParse('${i['args']?['idy']}') ?? -1;
-        if (aid > 0) {
-          aids.add(aid);
+      try {
+        // 随机大数idx，避免命中服务端翻页缓存；参数全部转字符串（Uri签名要求）
+        final int freshIdx =
+            DateTime.now().millisecondsSinceEpoch ~/ 1000 % 100000000;
+        final Map<String, dynamic> params = <String, dynamic>{
+          'idx': '$freshIdx',
+          'flush': '5',
+          'column': '4',
+          'device': 'pad',
+          'device_type': '0',
+          'device_name': 'vivo',
+          'pull': 'true',
+          'appkey': Constants.appKey,
+          'access_key': accessKey,
+        };
+        if (withSign) {
+          params['ts'] =
+              (DateTime.now().millisecondsSinceEpoch ~/ 1000).toString();
+          params['sign'] =
+              Utils.appSign(params, Constants.appKey, Constants.appSec);
         }
+        var res = await Request().get(Api.recommendListApp, data: params);
+        final dynamic body = res.data;
+        if (body is! Map) {
+          return {
+            'code': -99,
+            'msg': '非JSON响应: ${body.toString().substring(0, body.toString().length < 60 ? body.toString().length : 60)}',
+            'aids': <int>{}
+          };
+        }
+        final int code = int.tryParse('${body['code']}') ?? -1;
+        if (code != 0) {
+          log('diagnoseAppRcmd error: $code ${body['message']}');
+          return {'code': code, 'msg': body['message'], 'aids': <int>{}};
+        }
+        final Set<int> aids = {};
+        for (var i in body['data']['items']) {
+          final int aid = int.tryParse('${i['args']?['idy']}') ?? -1;
+          if (aid > 0) {
+            aids.add(aid);
+          }
+        }
+        return {'code': 0, 'msg': 'OK', 'aids': aids};
+      } catch (err) {
+        log('diagnoseAppRcmd fetchFeed exception: $err');
+        return {'code': -98, 'msg': '请求异常: $err', 'aids': <int>{}};
       }
-      return {'code': 0, 'msg': 'OK', 'aids': aids};
     }
 
-    double overlap(Set<int> a, Set<int> b) =>
-        a.isEmpty ? 0 : a.intersection(b).length / a.length;
+    try {
+      double overlap(Set<int> a, Set<int> b) =>
+          a.isEmpty ? 0 : a.intersection(b).length / a.length;
 
-    final String key =
-        localCache.get(LocalCacheKey.accessKey, defaultValue: {})['value'] ??
-            '';
-    if (key.isEmpty) {
+      final String key =
+          localCache.get(LocalCacheKey.accessKey, defaultValue: {})['value'] ??
+              '';
+      if (key.isEmpty) {
+        return {
+          'status': false,
+          'msg': '未获取到access_key，请先在「隐私设置」点“刷新access_key”后再诊断'
+        };
+      }
+      // 并发三发，减少时间漂移
+      final results = await Future.wait([
+        fetchFeed(key),
+        fetchFeed(key, withSign: true),
+        fetchFeed(''),
+      ]);
+      final Set<int> rawAids = results[0]['aids'];
+      final Set<int> signedAids = results[1]['aids'];
+      final Set<int> guestAids = results[2]['aids'];
+      if (results[2]['code'] != 0 || guestAids.isEmpty) {
+        return {
+          'status': false,
+          'msg': '游客基准请求失败（code=${results[2]['code']} ${results[2]['msg']}），请稍后重试'
+        };
+      }
+      if (results[0]['code'] != 0) {
+        return {
+          'status': false,
+          'msg': '明文请求失败（code=${results[0]['code']} ${results[0]['msg']}），token可能已失效，请到「隐私设置」刷新access_key'
+        };
+      }
       return {
-        'status': false,
-        'msg': '未获取到access_key，请先在「隐私设置」点“刷新access_key”后再诊断'
+        'status': true,
+        'signedCode': results[1]['code'],
+        'signedMsg': results[1]['msg'],
+        'rawCount': rawAids.length,
+        'signedCount': signedAids.length,
+        'rawOverlap': overlap(rawAids, guestAids),
+        'signedOverlap': overlap(signedAids, guestAids),
       };
+    } catch (err) {
+      log('diagnoseAppRcmd exception: $err');
+      return {'status': false, 'msg': '诊断异常：$err'};
     }
-    // 并发三发，减少时间漂移
-    final results = await Future.wait([
-      fetchFeed(key),
-      fetchFeed(key, withSign: true),
-      fetchFeed(''),
-    ]);
-    final Set<int> rawAids = results[0]['aids'];
-    final Set<int> signedAids = results[1]['aids'];
-    final Set<int> guestAids = results[2]['aids'];
-    if (results[2]['code'] != 0 || guestAids.isEmpty) {
-      return {
-        'status': false,
-        'msg': '游客基准请求失败（code=${results[2]['code']} ${results[2]['msg']}），请稍后重试'
-      };
-    }
-    if (results[0]['code'] != 0) {
-      return {
-        'status': false,
-        'msg': '明文请求失败（code=${results[0]['code']} ${results[0]['msg']}），token可能已失效，请到「隐私设置」刷新access_key'
-      };
-    }
-    return {
-      'status': true,
-      'signedCode': results[1]['code'],
-      'signedMsg': results[1]['msg'],
-      'rawCount': rawAids.length,
-      'signedCount': signedAids.length,
-      'rawOverlap': overlap(rawAids, guestAids),
-      'signedOverlap': overlap(signedAids, guestAids),
-    };
   }
 
   // 最热视频

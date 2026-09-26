@@ -144,7 +144,12 @@ class _RecommendSettingState extends State<RecommendSetting> {
             ),
             onTap: () async {
               SmartDialog.showLoading(msg: '诊断中…');
-              final res = await VideoHttp.diagnoseAppRcmd();
+              late final res;
+              try {
+                res = await VideoHttp.diagnoseAppRcmd();
+              } catch (e) {
+                res = {'status': false, 'msg': '诊断异常：$e'};
+              }
               SmartDialog.dismiss();
               String msg;
               if (!res['status']) {
@@ -156,7 +161,7 @@ class _RecommendSettingState extends State<RecommendSetting> {
                     res['signedCount'] > 0;
                 final bool midMatch = userInfo != null &&
                     accessKeyInfo != null &&
-                    '${accessKeyInfo['mid']}' == '${userInfo.mid}';
+                    '${accessKeyInfo['mid']}' == '${userInfo!.mid}';
                 String verdict;
                 if (raw < 0.5) {
                   verdict =
