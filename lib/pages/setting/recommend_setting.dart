@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:hive/hive.dart';
 import 'package:pilipala/http/member.dart';
+import 'package:pilipala/http/video.dart';
 import 'package:pilipala/models/common/rcmd_type.dart';
 import 'package:pilipala/models/user/info.dart';
 import 'package:pilipala/pages/setting/widgets/select_dialog.dart';
@@ -133,6 +134,73 @@ class _RecommendSettingState extends State<RecommendSetting> {
             subTitle: '下拉刷新时保留上次内容',
             setKey: SettingBoxKey.enableSaveLastData,
             defaultVal: false,
+          ),
+          ListTile(
+            dense: false,
+            title: Text('诊断app端推荐', style: titleStyle),
+            subtitle: Text(
+              '对比明文/签名/游客三种请求，定位推荐失效根因。建议先在「隐私设置」刷新access_key后马上诊断',
+              style: subTitleStyle,
+            ),
+            onTap: () async {
+              SmartDialog.showLoading(msg: '诊断中…');
+              final res = await VideoHttp.diagnoseAppRcmd();
+              SmartDialog.dismiss();
+              String msg;
+              if (!res['status']) {
+                msg = res['msg'];
+              } else {
+                final double raw = res['rawOverlap'];
+                final double signed = res['signedOverlap'];
+                final bool signedOk = res['signedCode'] == 0 &&
+                    res['signedCount'] > 0;
+                final bool midMatch = userInfo != null &&
+                    accessKeyInfo != null &&
+                    '${accessKeyInfo['mid']}' == '${userInfo.mid}';
+                String verdict;
+                if (raw < 0.5) {
+                  verdict =
+                      '结论A：明文access_key仍被服务端认可。之前推荐不对劲应为token陈旧，'
+                      '建议修复方向＝到期自动续期';
+                } else if (signedOk && signed < 0.5) {
+                  verdict =
+                      '结论B1：明文key被当游客，但加appkey签名后推荐不同→B站只是开始要求sign，'
+                      '修复方向＝推荐请求补加签名即可救活';
+                } else if (!signedOk) {
+                  verdict =
+                      '结论B2-：签名请求被服务端拒绝（code=${res['signedCode']} '
+                      '${res['signedMsg']}）→接口已要求完整设备认证（如x-bili-ticket），'
+                      '短期建议以web端推荐为主，长期可评估实现设备票据';
+                } else {
+                  verdict =
+                      '结论B2：新鲜token明文/签名均被当游客→B站已对第三方关闸（需设备票据），'
+                      '短期建议以web端推荐为主，长期可评估实现x-bili-ticket';
+                }
+                msg = '与游客结果重合率：明文 ${(raw * 100).toStringAsFixed(0)}%'
+                    '（${res['rawCount']}条） / 签名 '
+                    '${signedOk ? (signed * 100).toStringAsFixed(0) : '--'}%'
+                    '${signedOk ? '（${res['signedCount']}条）' : '（请求失败）'}\n\n'
+                    'token归属与当前账号一致：${midMatch ? '是' : '否（换过号，建议先刷新token再重测）'}\n\n'
+                    '$verdict';
+              }
+              if (context.mounted) {
+                showDialog(
+                  context: context,
+                  builder: (context) {
+                    return AlertDialog(
+                      title: const Text('诊断结果'),
+                      content: Text(msg),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.of(context).pop(),
+                          child: const Text('关闭'),
+                        ),
+                      ],
+                    );
+                  },
+                );
+              }
+            },
           ),
           // 分割线
           const Divider(height: 1),
