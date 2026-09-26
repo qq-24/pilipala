@@ -117,17 +117,77 @@ class VideoHttp {
     }
   }
 
-  // 诊断app端推荐登录态：明文key/带签名key/游客 三变体对比（前提：先刷新过access_key）
-  // 区分：A token问题 | B1 服务端要求sign | B2 服务端要求设备票据，明文/签名均不认
+  // 诊断app端推荐登录态 v3（证据版）
+  // live = 与首页完全一致的请求（key+全局cookie）；guest = 独立裸Dio真游客（无cookie无key）
+  // 串行请求、各自独立idx，避免并发同idx触发风控；并展示双方标题供目核
   static Future diagnoseAppRcmd() async {
-    Future<Map<String, dynamic>> fetchFeed(String accessKey,
-        {bool withSign = false}) async {
+    final int base =
+        DateTime.now().millisecondsSinceEpoch ~/ 1000 % 99990000;
+
+    Map<String, dynamic> parseBody(dynamic body) {
+      if (body is! Map) {
+        final String s = body?.toString() ?? 'null';
+        return {
+          'code': -99,
+          'msg': '非JSON: ${s.substring(0, s.length < 60 ? s.length : 60)}',
+          'aids': <int>{},
+          'titles': <String>[],
+        };
+      }
+      final int code = int.tryParse('${body['code']}') ?? -1;
+      if (code != 0) {
+        return {
+          'code': code,
+          'msg': body['message'],
+          'aids': <int>{},
+          'titles': <String>[]
+        };
+      }
+      final Set<int> aids = {};
+      final List<String> titles = [];
+      for (var i in (body['data']?['items'] ?? [])) {
+        final int aid = int.tryParse('${i['args']?['idy']}') ?? -1;
+        if (aid > 0) {
+          aids.add(aid);
+        }
+        final String t = '${i['title'] ?? ''}';
+        if (t.isNotEmpty) {
+          titles.add(t.length > 28 ? '${t.substring(0, 28)}…' : t);
+        }
+      }
+      return {'code': 0, 'msg': 'OK', 'aids': aids, 'titles': titles};
+    }
+
+    Map<String, dynamic> errResult(Object e) => {
+          'code': -98,
+          'msg': '请求异常: $e',
+          'aids': <int>{},
+          'titles': <String>[]
+        };
+
+    Future<Map<String, dynamic>> fetchViaApp(Map<String, dynamic> params) async {
       try {
-        // 随机大数idx，避免命中服务端翻页缓存；参数全部转字符串（Uri签名要求）
-        final int freshIdx =
-            DateTime.now().millisecondsSinceEpoch ~/ 1000 % 100000000;
-        final Map<String, dynamic> params = <String, dynamic>{
-          'idx': '$freshIdx',
+        var res = await Request().get(Api.recommendListApp, data: params);
+        return parseBody(res.data);
+      } catch (e) {
+        return errResult(e);
+      }
+    }
+
+    Future<Map<String, dynamic>> fetchTrueGuest(int idx) async {
+      Dio? bare;
+      try {
+        bare = Dio(BaseOptions(
+          connectTimeout: const Duration(seconds: 12),
+          receiveTimeout: const Duration(seconds: 12),
+          headers: const {
+            'user-agent':
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          },
+        ));
+        var res = await bare.getUri(
+            Uri.https('app.bilibili.com', '/x/v2/feed/index', {
+          'idx': '$idx',
           'flush': '5',
           'column': '4',
           'device': 'pad',
@@ -135,46 +195,17 @@ class VideoHttp {
           'device_name': 'vivo',
           'pull': 'true',
           'appkey': Constants.appKey,
-          'access_key': accessKey,
-        };
-        if (withSign) {
-          params['ts'] =
-              (DateTime.now().millisecondsSinceEpoch ~/ 1000).toString();
-          params['sign'] =
-              Utils.appSign(params, Constants.appKey, Constants.appSec);
-        }
-        var res = await Request().get(Api.recommendListApp, data: params);
-        final dynamic body = res.data;
-        if (body is! Map) {
-          return {
-            'code': -99,
-            'msg': '非JSON响应: ${body.toString().substring(0, body.toString().length < 60 ? body.toString().length : 60)}',
-            'aids': <int>{}
-          };
-        }
-        final int code = int.tryParse('${body['code']}') ?? -1;
-        if (code != 0) {
-          log('diagnoseAppRcmd error: $code ${body['message']}');
-          return {'code': code, 'msg': body['message'], 'aids': <int>{}};
-        }
-        final Set<int> aids = {};
-        for (var i in body['data']['items']) {
-          final int aid = int.tryParse('${i['args']?['idy']}') ?? -1;
-          if (aid > 0) {
-            aids.add(aid);
-          }
-        }
-        return {'code': 0, 'msg': 'OK', 'aids': aids};
-      } catch (err) {
-        log('diagnoseAppRcmd fetchFeed exception: $err');
-        return {'code': -98, 'msg': '请求异常: $err', 'aids': <int>{}};
+          'access_key': '',
+        }));
+        return parseBody(res.data);
+      } catch (e) {
+        return errResult(e);
+      } finally {
+        bare?.close(force: true);
       }
     }
 
     try {
-      double overlap(Set<int> a, Set<int> b) =>
-          a.isEmpty ? 0 : a.intersection(b).length / a.length;
-
       final String key =
           localCache.get(LocalCacheKey.accessKey, defaultValue: {})['value'] ??
               '';
@@ -184,35 +215,57 @@ class VideoHttp {
           'msg': '未获取到access_key，请先在「隐私设置」点“刷新access_key”后再诊断'
         };
       }
-      // 并发三发，减少时间漂移
-      final results = await Future.wait([
-        fetchFeed(key),
-        fetchFeed(key, withSign: true),
-        fetchFeed(''),
-      ]);
-      final Set<int> rawAids = results[0]['aids'];
-      final Set<int> signedAids = results[1]['aids'];
-      final Set<int> guestAids = results[2]['aids'];
-      if (results[2]['code'] != 0 || guestAids.isEmpty) {
+      const Map<String, dynamic> common = {
+        'flush': '5',
+        'column': '4',
+        'device': 'pad',
+        'device_type': '0',
+        'device_name': 'vivo',
+        'pull': 'true',
+        'appkey': Constants.appKey,
+      };
+      // 串行 + 各自独立idx，避免并发同idx被风控
+      final live = await fetchViaApp({
+        ...common,
+        'idx': '${base + 1}',
+        'access_key': key,
+      });
+      final signedParams = <String, dynamic>{
+        ...common,
+        'idx': '${base + 2}',
+        'access_key': key,
+        'ts': '${DateTime.now().millisecondsSinceEpoch ~/ 1000}',
+      };
+      signedParams['sign'] =
+          Utils.appSign(signedParams, Constants.appKey, Constants.appSec);
+      final signed = await fetchViaApp(signedParams);
+      var guest = await fetchTrueGuest(base + 3);
+      if (guest['code'] != 0) {
+        await Future.delayed(const Duration(milliseconds: 800));
+        guest = await fetchTrueGuest(base + 4); // 换idx重试一次
+      }
+      if (live['code'] != 0) {
         return {
           'status': false,
-          'msg': '游客基准请求失败（code=${results[2]['code']} ${results[2]['msg']}），请稍后重试'
+          'msg': '当前推荐请求失败（code=${live['code']} ${live['msg']}），请稍后重试'
         };
       }
-      if (results[0]['code'] != 0) {
-        return {
-          'status': false,
-          'msg': '明文请求失败（code=${results[0]['code']} ${results[0]['msg']}），token可能已失效，请到「隐私设置」刷新access_key'
-        };
+      double overlap(Map<String, dynamic> a, Map<String, dynamic> b) {
+        final Set<int> x = a['aids'];
+        final Set<int> y = b['aids'];
+        return x.isEmpty ? 0 : x.intersection(y).length / x.length;
       }
+
       return {
         'status': true,
-        'signedCode': results[1]['code'],
-        'signedMsg': results[1]['msg'],
-        'rawCount': rawAids.length,
-        'signedCount': signedAids.length,
-        'rawOverlap': overlap(rawAids, guestAids),
-        'signedOverlap': overlap(signedAids, guestAids),
+        'guestOk': guest['code'] == 0 && (guest['aids'] as Set).isNotEmpty,
+        'guestErr': '${guest['code']} ${guest['msg']}',
+        'overlap': overlap(live, guest),
+        'signedOverlap': overlap(signed, guest),
+        'signedCode': signed['code'],
+        'liveCount': (live['aids'] as Set).length,
+        'liveTitles': (live['titles'] as List).take(6).toList(),
+        'guestTitles': (guest['titles'] as List).take(6).toList(),
       };
     } catch (err) {
       log('diagnoseAppRcmd exception: $err');

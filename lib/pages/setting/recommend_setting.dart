@@ -151,42 +151,41 @@ class _RecommendSettingState extends State<RecommendSetting> {
                 res = {'status': false, 'msg': '诊断异常：$e'};
               }
               SmartDialog.dismiss();
-              String msg;
+              String head;
+              List<String> liveTitles = [];
+              List<String> guestTitles = [];
               if (!res['status']) {
-                msg = res['msg'];
+                head = res['msg'];
               } else {
-                final double raw = res['rawOverlap'];
-                final double signed = res['signedOverlap'];
-                final bool signedOk = res['signedCode'] == 0 &&
-                    res['signedCount'] > 0;
+                final double ov = res['overlap'];
+                final bool guestOk = res['guestOk'];
                 final bool midMatch = userInfo != null &&
                     accessKeyInfo != null &&
                     '${accessKeyInfo['mid']}' == '${userInfo!.mid}';
-                String verdict;
-                if (raw < 0.5) {
+                final String verdict;
+                if (!guestOk) {
                   verdict =
-                      '结论A：明文access_key仍被服务端认可。之前推荐不对劲应为token陈旧，'
-                      '建议修复方向＝到期自动续期';
-                } else if (signedOk && signed < 0.5) {
+                      '真游客基准仍失败（${res['guestErr']}），无法自动对比。'
+                      '请直接目测下方「当前推荐」标题是否与你兴趣相关。';
+                } else if (ov >= 0.9) {
                   verdict =
-                      '结论B1：明文key被当游客，但加appkey签名后推荐不同→B站只是开始要求sign，'
-                      '修复方向＝推荐请求补加签名即可救活';
-                } else if (!signedOk) {
+                      '当前推荐与真游客结果几乎一致（${(ov * 100).toStringAsFixed(0)}%重合）'
+                      '→ 登录态未生效，看到的是分发给所有人的通用内容';
+                } else if (ov >= 0.5) {
                   verdict =
-                      '结论B2-：签名请求被服务端拒绝（code=${res['signedCode']} '
-                      '${res['signedMsg']}）→接口已要求完整设备认证（如x-bili-ticket），'
-                      '短期建议以web端推荐为主，长期可评估实现设备票据';
+                      '重合率偏高（${(ov * 100).toStringAsFixed(0)}%）'
+                      '→ 部分生效或热度内容占比大，建议结合标题判断';
                 } else {
                   verdict =
-                      '结论B2：新鲜token明文/签名均被当游客→B站已对第三方关闸（需设备票据），'
-                      '短期建议以web端推荐为主，长期可评估实现x-bili-ticket';
+                      '与真游客结果差异显著（重合仅${(ov * 100).toStringAsFixed(0)}%）'
+                      '→ app端推荐携带的登录态正在生效，内容是你的个性化流';
                 }
-                msg = '与游客结果重合率：明文 ${(raw * 100).toStringAsFixed(0)}%'
-                    '（${res['rawCount']}条） / 签名 '
-                    '${signedOk ? (signed * 100).toStringAsFixed(0) : '--'}%'
-                    '${signedOk ? '（${res['signedCount']}条）' : '（请求失败）'}\n\n'
-                    'token归属与当前账号一致：${midMatch ? '是' : '否（换过号，建议先刷新token再重测）'}\n\n'
+                head = 'token归属与当前账号一致：'
+                    '${midMatch ? '是' : '否（换过号，建议刷新token后重测）'}\n'
+                    '签名请求重合率：${res['signedCode'] == 0 ? '${(res['signedOverlap'] * 100).toStringAsFixed(0)}%' : '失败(code=${res['signedCode']})'}\n\n'
                     '$verdict';
+                liveTitles = res['liveTitles'].cast<String>();
+                guestTitles = res['guestTitles'].cast<String>();
               }
               if (context.mounted) {
                 showDialog(
@@ -194,7 +193,39 @@ class _RecommendSettingState extends State<RecommendSetting> {
                   builder: (context) {
                     return AlertDialog(
                       title: const Text('诊断结果'),
-                      content: Text(msg),
+                      content: SingleChildScrollView(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(head,
+                                style:
+                                    Theme.of(context).textTheme.labelLarge),
+                            if (liveTitles.isNotEmpty) ...[
+                              const SizedBox(height: 10),
+                              Text('■ 当前app端推荐（登录态）：',
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .titleSmall),
+                              ...liveTitles.map((e) => Text('  $e',
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodySmall)),
+                            ],
+                            if (guestTitles.isNotEmpty) ...[
+                              const SizedBox(height: 10),
+                              Text('■ 真游客（无任何登录信息）：',
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .titleSmall),
+                              ...guestTitles.map((e) => Text('  $e',
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodySmall)),
+                            ],
+                          ],
+                        ),
+                      ),
                       actions: [
                         TextButton(
                           onPressed: () => Navigator.of(context).pop(),
