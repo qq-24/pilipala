@@ -2,6 +2,7 @@ import 'dart:math';
 import 'package:dio/dio.dart';
 import '../models/dynamics/result.dart';
 import '../models/dynamics/up.dart';
+import '../utils/diag_log.dart';
 import 'index.dart';
 
 class DynamicsHttp {
@@ -29,8 +30,9 @@ class DynamicsHttp {
           'status': true,
           'data': DynamicsDataModel.fromJson(res.data['data']),
         };
-      } catch (err) {
+      } catch (err, stack) {
         print(err);
+        DiagLog.write('[DYN-PARSE] $err\n$stack');
         return {
           'status': false,
           'data': [],
@@ -50,10 +52,15 @@ class DynamicsHttp {
   static Future followUp() async {
     var res = await Request().get(Api.followUp);
     if (res.data['code'] == 0) {
-      return {
-        'status': true,
-        'data': FollowUpModel.fromJson(res.data['data']),
-      };
+      try {
+        return {
+          'status': true,
+          'data': FollowUpModel.fromJson(res.data['data']),
+        };
+      } catch (err, stack) {
+        DiagLog.write('[DYN-UP-PARSE] $err\n$stack');
+        return {'status': false, 'data': [], 'msg': err.toString()};
+      }
     } else {
       return {
         'status': false,

@@ -1,4 +1,20 @@
 import 'dart:convert';
+// JSON安全数值转换：B站接口字段类型漂移(String<->int)不再引发崩溃
+int? asInt(dynamic v) {
+  if (v == null) return null;
+  if (v is int) return v;
+  if (v is double) return v.toInt();
+  if (v is String) return int.tryParse(v);
+  return null;
+}
+
+double asDouble(dynamic v, [double fallback = 0]) {
+  if (v == null) return fallback;
+  if (v is double) return v;
+  if (v is int) return v.toDouble();
+  if (v is String) return double.tryParse(v) ?? fallback;
+  return fallback;
+}
 
 class DynamicsDataModel {
   DynamicsDataModel({
@@ -18,7 +34,7 @@ class DynamicsDataModel {
         .map<DynamicItemModel>((e) => DynamicItemModel.fromJson(e))
         .toList();
     offset = json['offset'];
-    total = json['total'];
+    total = asInt(json['total']);
   }
 }
 
@@ -69,7 +85,7 @@ class ItemOrigModel {
     basic = json['basic'];
     isStr = json['is_str'];
     modules = ItemModulesModel.fromJson(json['modules']);
-    type = json['type'];
+        type = json['type'];
     visible = json['visible'];
   }
 }
@@ -143,11 +159,11 @@ class ModuleAuthorModel {
     following = json['following'];
     jumpUrl = json['jump_url'];
     label = json['label'];
-    mid = json['mid'];
+    mid = asInt(json['mid']);
     name = json['name'];
     pubAction = json['pub_action'];
     pubTime = json['pub_time'];
-    pubTs = json['pub_ts'] == 0 ? null : json['pub_ts'];
+    pubTs = asInt(json['pub_ts']) == 0 ? null : asInt(json['pub_ts']);
     type = json['type'];
     vip = json['vip'];
   }
@@ -214,7 +230,7 @@ class DynamicAddModel {
   String? common;
 
   DynamicAddModel.fromJson(Map<String, dynamic> json) {
-    type = json['type'];
+      type = json['type'];
     vote = json['vote'] != null ? Vote.fromJson(json['vote']) : null;
     ugc = json['ugc'] != null ? Ugc.fromJson(json['ugc']) : null;
     reserve =
@@ -247,17 +263,17 @@ class Vote {
   int? voteId;
 
   Vote.fromJson(Map<String, dynamic> json) {
-    choiceCnt = json['choice_cnt'];
+    choiceCnt = asInt(json['choice_cnt']);
     share = json['share'];
-    defaultShare = json['default_share'];
+    defaultShare = asInt(json['default_share']);
     endTime = json['end_time'] is int
         ? json['end_time']
         : int.parse(json['end_time']);
-    joinNum = json['join_num'];
-    status = json['status'];
-    type = json['type'];
-    uid = json['uid'];
-    voteId = json['vote_id'];
+    joinNum = asInt(json['join_num']);
+    status = asInt(json['status']);
+    type = asInt(json['type']);
+    uid = asInt(json['uid']);
+    voteId = asInt(json['vote_id']);
   }
 }
 
@@ -285,7 +301,7 @@ class Ugc {
   Ugc.fromJson(Map<String, dynamic> json) {
     cover = json['cover'];
     descSecond = json['desc_second'];
-    duration = json['duration'];
+        duration = json['duration'];
     headText = json['head_text'];
     idStr = json['id_str'];
     jumpUrl = json['jump_url'];
@@ -324,13 +340,13 @@ class Reserve {
     desc1 = json['desc1'];
     desc2 = json['desc2'];
     jumpUrl = json['jump_url'];
-    reserveTotal = json['reserve_total'];
-    rid = json['rid'];
-    state = json['state'];
-    state = json['state'];
-    stype = json['stype'];
+    reserveTotal = asInt(json['reserve_total']);
+    rid = asInt(json['rid']);
+    state = asInt(json['state']);
+    state = asInt(json['state']);
+    stype = asInt(json['stype']);
     title = json['title'];
-    upMid = json['up_mid'];
+    upMid = asInt(json['up_mid']);
   }
 }
 
@@ -377,7 +393,7 @@ class GoodItem {
   GoodItem.fromJson(Map<String, dynamic> json) {
     brief = json['brief'];
     cover = json['cover'];
-    id = json['id'];
+    id = asInt(json['id']);
     jumpDesc = json['jump_desc'];
     jumpUrl = json['jump_url'];
     name = json['name'];
@@ -457,7 +473,7 @@ class DynamicMajorModel {
         json['live'] != null ? DynamicLive2Model.fromJson(json['live']) : null;
     none =
         json['none'] != null ? DynamicNoneModel.fromJson(json['none']) : null;
-    type = json['type'];
+      type = json['type'];
     courses = json['courses'] ?? {};
     common = json['common'] ?? {};
     music = json['music'] ?? {};
@@ -476,7 +492,7 @@ class DynamicTopicModel {
   String? name;
 
   DynamicTopicModel.fromJson(Map<String, dynamic> json) {
-    id = json['id'];
+    id = asInt(json['id']);
     jumpUrl = json['jump_url'];
     name = json['name'];
   }
@@ -518,14 +534,14 @@ class DynamicArchiveModel {
     badge = json['badge'];
     bvid = json['bvid'] ?? json['epid'].toString() ?? ' ';
     cover = json['cover'];
-    disablePreview = json['disable_preview'];
+    disablePreview = asInt(json['disable_preview']);
     durationText = json['duration_text'];
     jumpUrl = json['jump_url'];
     stat = json['stat'] != null ? Stat.fromJson(json['stat']) : null;
     title = json['title'];
-    type = json['type'];
-    epid = json['epid'];
-    seasonId = json['season_id'];
+    type = asInt(json['type']);
+    epid = asInt(json['epid']);
+    seasonId = asInt(json['season_id']);
   }
 }
 
@@ -539,7 +555,7 @@ class DynamicDrawModel {
   List<DynamicDrawItemModel>? items;
 
   DynamicDrawModel.fromJson(Map<String, dynamic> json) {
-    id = json['id'];
+    id = asInt(json['id']);
     // ignore: prefer_null_aware_operators
     items = json['items'] != null
         ? json['items']
@@ -609,8 +625,8 @@ class RichTextNodeItem {
     emoji = json['emoji'] != null ? Emoji.fromJson(json['emoji']) : null;
     origText = json['orig_text'];
     text = json['text'];
-    type = json['type'];
-    rid = json['rid'];
+        type = json['type'];
+        rid = json['rid'];
   }
 }
 
@@ -628,9 +644,9 @@ class Emoji {
   int? type;
   Emoji.fromJson(Map<String, dynamic> json) {
     iconUrl = json['icon_url'];
-    size = json['size'].toDouble();
+    size = asDouble(json['size']);
     text = json['text'];
-    type = json['type'];
+    type = asInt(json['type']);
   }
 }
 
@@ -660,8 +676,8 @@ class OpusPicsModel {
   String? url;
 
   OpusPicsModel.fromJson(Map<String, dynamic> json) {
-    width = json['width'];
-    height = json['height'];
+    width = asInt(json['width']);
+    height = asInt(json['height']);
     size = json['size'] != null ? json['size'].toInt() : 0;
     src = json['src'];
     url = json['url'];
@@ -682,11 +698,11 @@ class DynamicDrawItemModel {
   List? tags;
   int? width;
   DynamicDrawItemModel.fromJson(Map<String, dynamic> json) {
-    height = json['height'];
+    height = asInt(json['height']);
     size = json['size'].toInt();
     src = json['src'];
     tags = json['tags'];
-    width = json['width'];
+    width = asInt(json['width']);
   }
 }
 
@@ -760,10 +776,10 @@ class DynamicLive2Model {
     cover = json['cover'];
     descFirst = json['desc_first'];
     descSecond = json['desc_second'];
-    id = json['id'];
+    id = asInt(json['id']);
     jumpUrl = json['jump_url'];
-    liveState = json['liv_state'];
-    reserveType = json['reserve_type'];
+    liveState = asInt(json['liv_state']);
+    reserveType = asInt(json['reserve_type']);
     title = json['title'];
   }
 }
@@ -829,7 +845,7 @@ class Like {
   Like.fromJson(Map<String, dynamic> json) {
     count = json['count'] == 0 ? null : json['count'].toString();
     forbidden = json['forbidden'];
-    status = json['status'];
+          status = json['status'];
   }
 }
 
