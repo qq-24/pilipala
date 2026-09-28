@@ -14,6 +14,7 @@ import '../models/video/ai.dart';
 import '../models/video/play/url.dart';
 import '../models/video/subTitile/result.dart';
 import '../models/video_detail_res.dart';
+import '../utils/diag_log.dart';
 import '../utils/recommend_filter.dart';
 import '../utils/storage.dart';
 import '../utils/subtitle.dart';
@@ -446,6 +447,163 @@ class VideoHttp {
     }
   }
 
+  // 点赞实验实验室：对同一支视频逐一测试请求形态变体（每变体 点赞→取消 复原），
+  // 结果写 diag.log，用于确定 B站 like 端点当前接受哪种请求形态
+  static Future likeLab() async {
+    try {
+      final rcmd = await rcmdVideoListApp(loginStatus: true, freshIdx: 0);
+      if (!rcmd['status'] || (rcmd['data'] as List).isEmpty) {
+        DiagLog.write('[LIKELAB] no-video');
+        return;
+      }
+      final RecVideoItemAppModel item = (rcmd['data'] as List).first;
+      final String bvid = '${item.bvid ?? ''}';
+      if (bvid.isEmpty) {
+        DiagLog.write('[LIKELAB] no-bvid');
+        return;
+      }
+      final String csrf = await Request.getCsrf();
+      const String webUA =
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+
+      Future<void> variant(String name, Future<dynamic> Function() fn) async {
+        try {
+          final res = await fn();
+          final body = res is Response ? res.data : res;
+          if (body is Map) {
+            DiagLog.write(
+                '[LIKELAB] $name code=${body['code']} msg=${body['message']}');
+          } else {
+            DiagLog.write('[LIKELAB] $name non-JSON(${res.runtimeType})');
+          }
+        } catch (e) {
+          DiagLog.write('[LIKELAB] $name exception=$e');
+        }
+      }
+
+      // A 当前形态：form、默认UA
+      Future<dynamic> a(int like) => Request().post(Api.likeVideo,
+          data: {'bvid': bvid, 'like': like, 'csrf': csrf});
+      await variant('A-form-noUA-like', () => a(1));
+      await variant('A-form-noUA-unlike', () => a(2));
+
+      // B 仅加浏览器UA
+      Future<dynamic> b(int like) => Request().post(
+          Api.likeVideo,
+          data: {'bvid': bvid, 'like': like, 'csrf': csrf},
+          options: Options(headers: {'user-agent': webUA}));
+      await variant('B-form-webUA-like', () => b(1));
+      await variant('B-form-webUA-unlike', () => b(2));
+
+      // C 对齐现行web：wbi签名query + JSON body + 浏览器UA + 视频页referer
+      final Map<String, dynamic> signed = await WbiSign().makSign({
+        'platform': 'web',
+        'web_location': '333.1387',
+        'csrf': csrf,
+      });
+      Future<dynamic> c(int like) => Request().post(
+          Api.likeVideo,
+          queryParameters: {
+            'platform': 'web',
+            'web_location': '333.1387',
+            'csrf': csrf,
+            'w_rid': signed['w_rid'],
+            'wts': signed['wts'],
+          },
+          data: {'bvid': bvid, 'like': like},
+          options: Options(
+              contentType: Headers.jsonContentType,
+              headers: {
+                'user-agent': webUA,
+                'referer': 'https://www.bilibili.com/video/$bvid/',
+              }));
+      await variant('C-wbi-json-like', () => c(1));
+      await variant('C-wbi-json-unlike', () => c(2));
+
+      // ===== 第二轮（round2）：补 Origin 等缺失要素 =====
+      const String origin = 'https://www.bilibili.com';
+      final Map<String, String> webHdrs = {
+        'user-agent': webUA,
+        'origin': origin,
+        'referer': 'https://www.bilibili.com/video/$bvid/',
+      };
+
+      // D form + webUA + Origin + referer
+      Future<dynamic> d(int like) => Request().post(Api.likeVideo,
+          data: {'bvid': bvid, 'like': like, 'csrf': csrf},
+          options: Options(headers: webHdrs));
+      await variant('D2-form-origin-like', () => d(1));
+      await variant('D2-form-origin-unlike', () => d(2));
+
+      // G 全参数进query并整体wbi签名，无body（签名必须用实际like值现算）
+      Future<Map<String, dynamic>> gq(int like) => WbiSign().makSign({
+            'bvid': bvid,
+            'like': like,
+            'platform': 'web',
+            'web_location': '333.1387',
+            'csrf': csrf,
+          });
+      Future<dynamic> g(int like) async => Request().post(Api.likeVideo,
+          queryParameters: await gq(like),
+          options: Options(headers: webHdrs));
+
+      await variant('D2-fullquery-wbi-like', () => g(1));
+      await variant('D2-fullquery-wbi-unlike', () => g(2));
+
+      // H 同C形状但补Origin（C失败可能因缺Origin被判参数错）
+      Future<dynamic> h(int like) => Request().post(
+          Api.likeVideo,
+          queryParameters: {
+            'platform': 'web',
+            'web_location': '333.1387',
+            'csrf': csrf,
+            'w_rid': signed['w_rid'],
+            'wts': signed['wts'],
+          },
+          data: {'bvid': bvid, 'like': like},
+          options: Options(
+              contentType: Headers.jsonContentType, headers: webHdrs));
+      await variant('D2-wbi-json-origin-like', () => h(1));
+      await variant('D2-wbi-json-origin-unlike', () => h(2));
+
+      // J 双保险：签名query带全部参数 + form body 再带一份
+      Future<dynamic> j(int like) async => Request().post(Api.likeVideo,
+          queryParameters: await gq(like),
+          data: {'bvid': bvid, 'like': like, 'csrf': csrf},
+          options: Options(headers: webHdrs));
+
+      await variant('D2-query-and-form-like', () => j(1));
+      await variant('D2-query-and-form-unlike', () => j(2));
+
+      // K 软拒绝验证：点赞→回读→取消→回读，确认-403下操作是否实际生效
+      await variant('D3-g-like', () => g(1));
+      final bool afterLike = await hasLiked(bvid);
+      DiagLog.write('[LIKELAB] D3-has-like-after=$afterLike');
+      await variant('D3-g-unlike', () => g(2));
+      final bool afterUnlike = await hasLiked(bvid);
+      DiagLog.write('[LIKELAB] D3-has-like-afterUnlike=$afterUnlike');
+    } catch (e) {
+      DiagLog.write('[LIKELAB] fatal $e');
+    }
+  }
+
+  // 回读点赞状态（只读接口）
+  static Future<bool> hasLiked(String bvid) async {
+    try {
+      var res = await Request().get(
+        '/x/web-interface/archive/has/like',
+        data: {'bvid': bvid},
+      );
+      final body = res.data;
+      if (body is Map && body['code'] == 0) {
+        return body['data'] == true;
+      }
+    } catch (e) {
+      log('hasLiked error: $e');
+    }
+    return false;
+  }
+
   // （取消）点赞
   static Future likeVideo({required String bvid, required bool type}) async {
     var res = await Request().post(
@@ -458,6 +616,14 @@ class VideoHttp {
     );
     if (res.data['code'] == 0) {
       return {'status': true, 'data': res.data['data']};
+    } else if (res.data['code'] == -403) {
+      // B站风控“软拒绝”：-403时操作可能已实际生效，以只读接口回读为准
+      final bool actuallyLiked = await hasLiked(bvid);
+      if (actuallyLiked == type) {
+        DiagLog.write('[LIKE-FB] -403 soft-deny, actual state=$actuallyLiked');
+        return {'status': true, 'data': actuallyLiked};
+      }
+      return {'status': false, 'data': [], 'msg': res.data['message']};
     } else {
       return {'status': false, 'data': [], 'msg': res.data['message']};
     }
