@@ -77,17 +77,15 @@ class UserHttp {
       results.add({'name': 'nav 登录探活', 'code': 'X', 'msg': '$e'});
     }
 
-    // 2. cookie 存储状态（只报存在性，不打印值）
+    // 2. cookie 存储状态（只列名称，不打印值）
     try {
       final cookies = await Request.cookieManager.cookieJar
           .loadForRequest(Uri.parse(HttpString.apiBaseUrl));
-      bool has(String n) => cookies.any((c) => c.name == n);
+      final names = cookies.map((c) => c.name).toSet().toList();
       results.add({
-        'name': 'Cookie 存储',
+        'name': 'Cookie 存储(${names.length}项)',
         'code': '',
-        'msg': 'SESSDATA:${has('SESSDATA') ? '有' : '无'} '
-            'bili_jct:${has('bili_jct') ? '有' : '无'} '
-            'buvid3:${has('buvid3') ? '有' : '无'}',
+        'msg': names.isEmpty ? '空' : names.take(18).join(' '),
       });
     } catch (e) {
       results.add({'name': 'Cookie 存储', 'code': 'X', 'msg': '$e'});

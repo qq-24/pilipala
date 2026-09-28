@@ -55,11 +55,45 @@ class Request {
       await buvidActivate();
     } catch (_) {}
 
+    // 补齐设备指纹cookie组（buvid3/buvid4），缺失时点赞等接口会报-401账号异常
+    try {
+      await ensureDeviceCookies();
+    } catch (_) {}
+
     final String cookieString = cookie
         .map((Cookie cookie) => '${cookie.name}=${cookie.value}')
         .join('; ');
 
     dio.options.headers['cookie'] = cookieString;
+  }
+
+  /// 从 finger/spi 接口补齐 buvid3 / buvid4（域级 .bilibili.com），已有则跳过
+  static Future ensureDeviceCookies() async {
+    final Uri probeUri = Uri.parse(HttpString.apiBaseUrl);
+    final List<Cookie> exist =
+        await cookieManager.cookieJar.loadForRequest(probeUri);
+    bool has(String n) =>
+        exist.any((c) => c.name == n && (c.value?.isNotEmpty ?? false));
+    if (has('buvid3') && has('buvid4')) return;
+    var res = await Request().get("${HttpString.apiBaseUrl}/x/frontend/finger/spi");
+    final dynamic data = res.data is Map ? res.data['data'] : null;
+    if (data is! Map) return;
+    final List<Cookie> toSave = [];
+    if (!has('buvid3') && data['b_3'] != null) {
+      toSave.add(Cookie('buvid3', '${data['b_3']}')
+        ..domain = '.bilibili.com'
+        ..path = '/');
+    }
+    if (!has('buvid4') && data['b_4'] != null) {
+      toSave.add(Cookie('buvid4', '${data['b_4']}')
+        ..domain = '.bilibili.com'
+        ..path = '/');
+    }
+    if (toSave.isNotEmpty) {
+      await cookieManager.cookieJar
+          .saveFromResponse(Uri.parse(HttpString.baseUrl), toSave);
+      buvid = null; // 重置缓存
+    }
   }
 
   // buvid 设备指纹激活（源自 1.0.25 实现，v1026 分支误删）
