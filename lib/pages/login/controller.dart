@@ -353,18 +353,21 @@ class LoginPageController extends GetxController {
     String domain = HttpString.baseUrl,
   }) async {
     final List<String> cookiesStrList = cookiesStr.split('; ');
-    final List<Cookie> cookiesList = cookiesStrList.map((cookie) {
-      final cookieArr = cookie.split('=');
-      return Cookie(cookieArr[0], cookieArr[1]);
-    }).toList();
+    // value 中可能含 '='，只按第一个 '=' 切分；补全域级domain，保证 api/passport 等子域都能匹配
+    final List<Cookie> cookiesList = cookiesStrList
+        .map((cookie) {
+          final int idx = cookie.indexOf('=');
+          if (idx <= 0) return null;
+          return Cookie(cookie.substring(0, idx).trim(),
+              cookie.substring(idx + 1).trim())
+            ..domain = '.bilibili.com'
+            ..path = '/';
+        })
+        .whereType<Cookie>()
+        .toList();
 
-    final String cookiePath = await Utils.getCookiePath();
-    final cookieJar = PersistCookieJar(
-      ignoreExpires: true,
-      storage: FileStorage(cookiePath),
-    );
-    CookieManager cookieManager = CookieManager(cookieJar);
-    Request.cookieManager = cookieManager;
+    // 直接写入 dio 拦截器正在使用的同一个 jar 实例（v1026 原实现替换静态引用导致双jar分裂，
+    // 请求发出用旧实例、写入用新实例，登录态无法保持）
     await Request.cookieManager.cookieJar
         .saveFromResponse(Uri.parse(HttpString.baseUrl), cookiesList);
     try {

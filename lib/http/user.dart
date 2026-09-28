@@ -12,6 +12,7 @@ import '../models/user/stat.dart';
 import '../models/user/sub_detail.dart';
 import '../models/user/sub_folder.dart';
 import 'api.dart';
+import 'constants.dart';
 import 'init.dart';
 
 class UserHttp {
@@ -32,6 +33,75 @@ class UserHttp {
     } else {
       return {'status': false, 'msg': res.data['message']};
     }
+  }
+
+  // 登录态自检：逐一探测受登录影响的接口，回报B站原始错误码
+  static Future<List<Map<String, String>>> loginSelfCheck() async {
+    final results = <Map<String, String>>[];
+    Future<void> probe(String name, String url,
+        [Map<String, dynamic>? data]) async {
+      try {
+        var res = await Request().get(url, data: data);
+        final body = res.data;
+        if (body is Map) {
+          results.add({
+            'name': name,
+            'code': '${body['code']}',
+            'msg': '${body['message'] ?? ''}',
+          });
+        } else {
+          results.add({'name': name, 'code': 'E', 'msg': '非JSON响应'});
+        }
+      } catch (e) {
+        results.add({'name': name, 'code': 'X', 'msg': '$e'});
+      }
+    }
+
+    // 1. 登录探活
+    dynamic mid;
+    bool isLogin = false;
+    try {
+      var res = await Request().get(Api.userInfo);
+      if (res.data is Map) {
+        isLogin = res.data['data']?['isLogin'] == true;
+        mid = res.data['data']?['mid'];
+        results.add({
+          'name': 'nav 登录探活',
+          'code': '${res.data['code']}',
+          'msg': 'isLogin=$isLogin mid=${mid ?? '-'}',
+        });
+      } else {
+        results.add({'name': 'nav 登录探活', 'code': 'E', 'msg': '非JSON响应'});
+      }
+    } catch (e) {
+      results.add({'name': 'nav 登录探活', 'code': 'X', 'msg': '$e'});
+    }
+
+    // 2. cookie 存储状态（只报存在性，不打印值）
+    try {
+      final cookies = await Request.cookieManager.cookieJar
+          .loadForRequest(Uri.parse(HttpString.apiBaseUrl));
+      bool has(String n) => cookies.any((c) => c.name == n);
+      results.add({
+        'name': 'Cookie 存储',
+        'code': '',
+        'msg': 'SESSDATA:${has('SESSDATA') ? '有' : '无'} '
+            'bili_jct:${has('bili_jct') ? '有' : '无'} '
+            'buvid3:${has('buvid3') ? '有' : '无'}',
+      });
+    } catch (e) {
+      results.add({'name': 'Cookie 存储', 'code': 'X', 'msg': '$e'});
+    }
+
+    // 3-5. 受登录影响的数据接口（用原始端点，回报原始code）
+    if (mid != null) {
+      await probe('收藏夹列表', Api.userFavFolder,
+          {'pn': 1, 'ps': 3, 'up_mid': mid});
+      await probe
+          ('观看历史', '/x/v2/history', {'mid': mid, 'pn': 1, 'ps': 3});
+      await probe('动态门户', Api.followUp);
+    }
+    return results;
   }
 
   static Future<dynamic> userStatOwner() async {
