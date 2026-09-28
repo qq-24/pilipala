@@ -14,6 +14,7 @@ import '../models/user/sub_folder.dart';
 import 'api.dart';
 import 'constants.dart';
 import 'init.dart';
+import '../utils/storage.dart';
 
 class UserHttp {
   static Future<dynamic> userStat({required int mid}) async {
@@ -57,46 +58,64 @@ class UserHttp {
       }
     }
 
-    // 1. 登录探活
+    // 1. 登录探活（带HTTP状态码与响应类型，鉴别反爬拦截）
     dynamic mid;
-    bool isLogin = false;
     try {
       var res = await Request().get(Api.userInfo);
-      if (res.data is Map) {
-        isLogin = res.data['data']?['isLogin'] == true;
-        mid = res.data['data']?['mid'];
+      final body = res.data;
+      final String bodyType =
+          body is Map ? 'json' : 'html(${(body?.toString() ?? '')
+              .replaceAll('\n', ' ').substring(
+                  0, (body?.toString() ?? '').length < 50
+                      ? (body?.toString() ?? '').length
+                      : 50)})';
+      if (body is Map && body['data'] is Map) {
+        mid = body['data']['mid'];
         results.add({
           'name': 'nav 登录探活',
-          'code': '${res.data['code']}',
-          'msg': 'isLogin=$isLogin mid=${mid ?? '-'}',
+          'code': '${res.statusCode}|${body['code']}|isLogin=${body['data']['isLogin']}|mid=$mid',
+          'msg': bodyType,
         });
       } else {
-        results.add({'name': 'nav 登录探活', 'code': 'E', 'msg': '非JSON响应'});
+        results.add({
+          'name': 'nav 登录探活',
+          'code': '${res.statusCode}',
+          'msg': 'body=$bodyType bizCode=${body is Map ? body['code'] : '?'} '
+              'bizMsg=${body is Map ? body['message'] : ''}',
+        });
       }
     } catch (e) {
       results.add({'name': 'nav 登录探活', 'code': 'X', 'msg': '$e'});
     }
 
-    // 2. cookie 存储状态（只列名称，不打印值）
+    // 2. cookie 存储状态（检测同名重复：双会话并存会导致服务端判会话错乱→-403）
     try {
       final cookies = await Request.cookieManager.cookieJar
           .loadForRequest(Uri.parse(HttpString.apiBaseUrl));
-      final names = cookies.map((c) => c.name).toSet().toList();
+      final names = cookies.map((c) => c.name).toList();
+      final nameSet = names.toSet();
+      final int dup = names.length - nameSet.length;
       results.add({
-        'name': 'Cookie 存储(${names.length}项)',
+        'name': 'Cookie 存储(${names.length}项,重复$dup)',
         'code': '',
-        'msg': names.isEmpty ? '空' : names.take(18).join(' '),
+        'msg': nameSet.isEmpty ? '空' : nameSet.take(18).join(' '),
       });
     } catch (e) {
       results.add({'name': 'Cookie 存储', 'code': 'X', 'msg': '$e'});
     }
 
-    // 3-5. 受登录影响的数据接口（用原始端点，回报原始code）
-    if (mid != null) {
+    // 3-5. 受登录影响的数据接口（用原始端点，回报原始code）；nav拿不到mid时用本地缓存兜底
+    dynamic probeMid = mid;
+    if (probeMid == null) {
+      try {
+        probeMid = GStorage.userInfo.get('userInfoCache')?.mid;
+      } catch (_) {}
+    }
+    if (probeMid != null) {
       await probe('收藏夹列表', Api.userFavFolder,
-          {'pn': 1, 'ps': 3, 'up_mid': mid});
+          {'pn': 1, 'ps': 3, 'up_mid': probeMid});
       await probe
-          ('观看历史', '/x/v2/history', {'mid': mid, 'pn': 1, 'ps': 3});
+          ('观看历史', '/x/v2/history', {'mid': probeMid, 'pn': 1, 'ps': 3});
       await probe('动态门户', Api.followUp);
     }
     return results;

@@ -9,6 +9,7 @@ import 'package:dio/io.dart';
 import 'package:dio_cookie_manager/dio_cookie_manager.dart';
 import 'package:hive/hive.dart';
 import 'package:pilipala/utils/id_utils.dart';
+import '../utils/diag_log.dart';
 import '../utils/storage.dart';
 import '../utils/utils.dart';
 import 'api.dart';
@@ -31,6 +32,7 @@ class Request {
 
   /// 设置cookie
   static setCookie() async {
+    DiagLog.write('setCookie begin');
     Box userInfoCache = GStorage.userInfo;
     Box setting = GStorage.setting;
     final String cookiePath = await Utils.getCookiePath();
@@ -50,14 +52,18 @@ class Request {
     }
     setBaseUrl(type: baseUrlType);
 
-    // 设备指纹激活（buvid3注册），缺失会导致评论/弹幕/动态等触发-352风控
+    // 设备指纹：仅在jar中完全没有buvid指纹时才注册/补齐。
+    // 已有指纹（如cookie登录导入的整套浏览器会话）时绝不能重新注册：
+    // ExClimbWuzhi 会轮转buvid3，导致指纹与登录会话配对不一致 → 点赞类接口报-401账号异常
     try {
-      await buvidActivate();
-    } catch (_) {}
-
-    // 补齐设备指纹cookie组（buvid3/buvid4），缺失时点赞等接口会报-401账号异常
-    try {
-      await ensureDeviceCookies();
+      final exist = await cookieManager.cookieJar
+          .loadForRequest(Uri.parse(HttpString.apiBaseUrl));
+      final bool hasBuvid = exist
+          .any((c) => c.name == 'buvid3' || c.name == 'buvid4');
+      if (!hasBuvid) {
+        await buvidActivate();
+        await ensureDeviceCookies();
+      }
     } catch (_) {}
 
     final String cookieString = cookie

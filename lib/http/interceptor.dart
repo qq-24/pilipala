@@ -3,6 +3,7 @@
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
+import 'package:pilipala/utils/diag_log.dart';
 // import 'package:pilipala/utils/login.dart';
 
 class ApiInterceptor extends Interceptor {
@@ -18,6 +19,12 @@ class ApiInterceptor extends Interceptor {
   @override
   void onResponse(Response response, ResponseInterceptorHandler handler) {
     try {
+      // 自动上报：所有返回非0错误码的接口（进 diag.log，可被adb直接读取）
+      final data = response.data;
+      if (data is Map && data['code'] is int && data['code'] != 0) {
+        DiagLog.write(
+            '[APICNT] ${response.requestOptions.uri.path} code=${data['code']} msg=${data['message']}');
+      }
       // 在响应之后处理数据
       // if (response.data is Map && response.data['code'] == -101) {
       //   LoginUtils.loginOut();
@@ -62,6 +69,8 @@ class ApiInterceptor extends Interceptor {
         return '响应超时，请稍后重试！';
       case DioExceptionType.sendTimeout:
         return '发送请求超时，请检查网络设置';
+      case DioExceptionType.transformTimeout:
+        return '数据转换超时，请稍后重试！';
       case DioExceptionType.unknown:
         final String res = await checkConnect();
         return '$res ${error.error}';

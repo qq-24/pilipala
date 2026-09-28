@@ -366,6 +366,8 @@ class LoginPageController extends GetxController {
         .whereType<Cookie>()
         .toList();
 
+    // 先清除各域下同名旧cookie，避免新旧双会话并存被同时发送（服务端判会话错乱→-403）
+    await _purgeStaleSessionCookies(cookiesList.map((c) => c.name).toList());
     // 直接写入 dio 拦截器正在使用的同一个 jar 实例（v1026 原实现替换静态引用导致双jar分裂，
     // 请求发出用旧实例、写入用新实例，登录态无法保持）
     await Request.cookieManager.cookieJar
@@ -376,5 +378,22 @@ class LoginPageController extends GetxController {
       debugPrint(err.toString());
     }
     LoginUtils.confirmLogin('', null);
+  }
+
+  /// 清除相关域名下的全部旧cookie（含域共享），随后整体导入浏览器成套cookie，
+  /// 杜绝新旧双会话并存被同时发送（服务端判会话错乱→-403）
+  Future<void> _purgeStaleSessionCookies(List<String> newNames) async {
+    const hosts = [
+      HttpString.baseUrl,
+      HttpString.apiBaseUrl,
+      HttpString.passBaseUrl,
+      HttpString.messageBaseUrl,
+      HttpString.liveBaseUrl,
+    ];
+    for (final host in hosts) {
+      try {
+        await Request.cookieManager.cookieJar.delete(Uri.parse(host), true);
+      } catch (_) {}
+    }
   }
 }

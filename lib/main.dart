@@ -312,6 +312,13 @@ class BuildMainApp extends StatelessWidget {
         // 启动后自动登录态自检，写入diag.log，可由adb直接读取（无需人工操作）
         Future.delayed(const Duration(seconds: 10), () async {
           DiagLog.write('selfcheck scheduled fire');
+          // 记录App真实出口IP（与点赞请求同一网络通道），用于和PC出口对比
+          try {
+            final r = await Request().get('https://api.ip.sb/jsonip');
+            DiagLog.write('[MYIP] app exit: ${r.data}');
+          } catch (e) {
+            DiagLog.write('[MYIP] error: $e');
+          }
           try {
             final rows = await UserHttp.loginSelfCheck();
             for (var r in rows) {
