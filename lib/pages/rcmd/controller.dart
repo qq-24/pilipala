@@ -6,6 +6,7 @@ import 'package:pilipala/http/member.dart';
 import 'package:pilipala/http/video.dart';
 import 'package:pilipala/models/home/rcmd/result.dart';
 import 'package:pilipala/models/model_rec_video_item.dart';
+import 'package:pilipala/utils/diag_log.dart';
 import 'package:pilipala/utils/storage.dart';
 
 class RcmdController extends GetxController {
@@ -46,6 +47,9 @@ class RcmdController extends GetxController {
     try {
       final userInfo = GStorage.userInfo.get('userInfoCache');
       if (userInfo == null) return; // 未登录不续期
+      // 原版APK同款登录态云端同步：静默续签会话cookie（失败则回退cookieToKey流程）
+      final sync = await MemberHttp.cookieSync();
+      DiagLog.write('[COOKIESYNC] ${sync['status']} ${sync['msg']}');
       final dynamic ak =
           GStorage.localCache.get(LocalCacheKey.accessKey, defaultValue: null);
       final int ts = int.tryParse('${ak?['ts'] ?? 0}') ?? 0;

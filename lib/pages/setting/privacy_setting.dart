@@ -61,6 +61,19 @@ class _PrivacySettingState extends State<PrivacySetting> {
           ),
           ListTile(
             onTap: () async {
+              SmartDialog.showLoading(msg: '同步中…');
+              final res = await MemberHttp.cookieSync();
+              SmartDialog.dismiss();
+              SmartDialog.showToast(
+                  '登录态同步：${res['status'] == true ? '成功' : '失败 ${res['msg']}'}');
+            },
+            dense: false,
+            title: Text('登录态云端同步', style: titleStyle),
+            subtitle: Text('原版APK同款会话续签机制，每次启动自动执行',
+                style: subTitleStyle),
+          ),
+          ListTile(
+            onTap: () async {
               SmartDialog.showLoading(msg: '自检中…');
               late List<Map<String, String>> rows;
               try {

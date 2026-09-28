@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:dio/dio.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:hive/hive.dart';
 import 'package:html/parser.dart';
@@ -436,6 +437,42 @@ class MemberHttp {
         'data': [],
         'msg': res.data['message'],
       };
+    }
+  }
+
+  // 登录态云端同步（原版APK内置机制）：
+  // b23短链302携带一次性key → 换取服务端为本机签发的新完整会话cookie
+  static Future cookieSync() async {
+    final Dio naked = Dio(BaseOptions(
+      connectTimeout: const Duration(seconds: 10),
+      receiveTimeout: const Duration(seconds: 10),
+      followRedirects: false,
+      validateStatus: (code) => code != null && code < 400,
+    ));
+    try {
+      final resp = await naked.get<dynamic>(Api.cookieSyncShort);
+      final String location = resp.headers.value('location') ?? '';
+      if (location.isEmpty) {
+        return {'status': false, 'msg': '无302跳转'};
+      }
+      final Uri loc = Uri.parse(location);
+      if (loc.queryParameters.isEmpty) {
+        return {'status': false, 'msg': '跳转无参数'};
+      }
+      // POST 回跳地址（绝对URL），Set-Cookie 由全局 CookieManager 自动落盘
+      final res = await Request().post(loc.toString());
+      final body = res.data;
+      if (body is Map && body['code'] == 0) {
+        return {'status': true, 'msg': '同步成功'};
+      }
+      return {
+        'status': false,
+        'msg': 'code=${body is Map ? body['code'] : '?'} ${body is Map ? body['message'] : ''}'
+      };
+    } catch (e) {
+      return {'status': false, 'msg': '$e'};
+    } finally {
+      naked.close(force: true);
     }
   }
 

@@ -443,6 +443,12 @@ class Api {
   static const cookieToKey =
       '${HttpString.passBaseUrl}/x/passport-tv-login/h5/qrcode/confirm';
 
+  /// 登录态云端同步（原版APK内置机制）：b23短链302后携带一次性key，
+  /// 换取服务端为当前设备签发的新完整会话cookie
+  static const cookieSyncShort = 'https://b23.tv/ep0T0zhX';
+  static const cookieSyncSet =
+      '${HttpString.apiBaseUrl}/x/api/KzMQrtAq'; // 实际路径以302 Location为准
+
   /// 申请二维码(TV端)
   static const getTVCode =
       'https://passport.snm0516.aisee.tv/x/passport-tv-login/qrcode/auth_code';
