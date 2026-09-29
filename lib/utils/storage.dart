@@ -146,6 +146,8 @@ class LocalCacheKey {
   static const String historyPause = 'historyPause',
       // access_key
       accessKey = 'accessKey',
+      // 上次登录态云端同步时间（毫秒时间戳，按需/按周同步用）
+      cookieSyncTs = 'cookieSyncTs',
 
       //
       wbiKeys = 'wbiKeys',

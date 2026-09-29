@@ -76,29 +76,12 @@ class VideoHttp {
   // 添加额外的loginState变量模拟未登录状态
   static Future rcmdVideoListApp(
       {bool loginStatus = true, required int freshIdx}) async {
-    var res = await Request().get(
-      Api.recommendListApp,
-      data: {
-        'idx': freshIdx,
-        'flush': '5',
-        'column': '4',
-        'device': 'pad',
-        'device_type': 0,
-        'device_name': 'vivo',
-        'pull': freshIdx == 0 ? 'true' : 'false',
-        'appkey': Constants.appKey,
-        'access_key': loginStatus
-            ? (localCache
-                    .get(LocalCacheKey.accessKey, defaultValue: {})['value'] ??
-                '')
-            : ''
-      },
-    );
-    if (res.data['code'] == 0) {
-      List<RecVideoItemAppModel> list = [];
+    List<RecVideoItemAppModel> parseItems(dynamic body) {
+      final List<RecVideoItemAppModel> list = [];
+      if (body is! Map) return list;
       List<int> blackMidsList =
           setting.get(SettingBoxKey.blackMidsList, defaultValue: [-1]);
-      for (var i in res.data['data']['items']) {
+      for (var i in body['data']['items']) {
         // 屏蔽推广和拉黑用户
         if (i['card_goto'] != 'ad_av' &&
             i['card_goto'] != 'ad_web_s' &&
@@ -112,10 +95,59 @@ class VideoHttp {
           }
         }
       }
-      return {'status': true, 'data': list};
-    } else {
-      return {'status': false, 'data': [], 'msg': res.data['message']};
+      return list;
     }
+
+    Future<Map<String, dynamic>> fetch(Map<String, dynamic> params) async {
+      try {
+        var res = await Request().get(Api.recommendListApp, data: params);
+        if (res.data['code'] == 0) {
+          return {'status': true, 'data': parseItems(res.data)};
+        }
+        return {'status': false, 'data': [], 'msg': res.data['message']};
+      } catch (err) {
+        return {'status': false, 'data': [], 'msg': err.toString()};
+      }
+    }
+
+    final String pull = freshIdx == 0 ? 'true' : 'false';
+    final String accessKey = loginStatus
+        ? (localCache.get(LocalCacheKey.accessKey, defaultValue: {})['value'] ??
+            '')
+        : '';
+    // 先走官方签名形态（与诊断页已验证的签名分支同形）；服务端不认则回退原形态，
+    // 保证失败时不比以前差
+    final Map<String, dynamic> signed = {
+      'idx': '$freshIdx',
+      'flush': '5',
+      'column': '4',
+      'device': 'pad',
+      'device_type': '0',
+      'device_name': 'vivo',
+      'pull': pull,
+      'appkey': Constants.appKey,
+      'access_key': accessKey,
+      'ts': '${DateTime.now().millisecondsSinceEpoch ~/ 1000}',
+    };
+    signed['sign'] =
+        Utils.appSign(Map<String, dynamic>.from(signed), Constants.appKey, Constants.appSec);
+    final signedRes = await fetch(signed);
+    if (signedRes['status']) return signedRes;
+    return fetch({
+      'idx': freshIdx,
+      'flush': '5',
+      'column': '4',
+      'device': 'pad',
+      'device_type': 0,
+      'device_name': 'vivo',
+      'pull': freshIdx == 0 ? 'true' : 'false',
+      'appkey': Constants.appKey,
+      'access_key': loginStatus
+          ? (localCache
+                  .get(LocalCacheKey.accessKey, defaultValue: {})['value'] ??
+              '')
+          : ''
+    });
   }
 
   // 诊断app端推荐登录态 v3（证据版）
@@ -444,146 +476,6 @@ class VideoHttp {
       return {'status': true, 'data': res.data['data']};
     } else {
       return {'status': false, 'data': [], 'msg': res.data['message']};
-    }
-  }
-
-  // 点赞实验实验室：对同一支视频逐一测试请求形态变体（每变体 点赞→取消 复原），
-  // 结果写 diag.log，用于确定 B站 like 端点当前接受哪种请求形态
-  static Future likeLab() async {
-    try {
-      final rcmd = await rcmdVideoListApp(loginStatus: true, freshIdx: 0);
-      if (!rcmd['status'] || (rcmd['data'] as List).isEmpty) {
-        DiagLog.write('[LIKELAB] no-video');
-        return;
-      }
-      final RecVideoItemAppModel item = (rcmd['data'] as List).first;
-      final String bvid = '${item.bvid ?? ''}';
-      if (bvid.isEmpty) {
-        DiagLog.write('[LIKELAB] no-bvid');
-        return;
-      }
-      final String csrf = await Request.getCsrf();
-      const String webUA =
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
-
-      Future<void> variant(String name, Future<dynamic> Function() fn) async {
-        try {
-          final res = await fn();
-          final body = res is Response ? res.data : res;
-          if (body is Map) {
-            DiagLog.write(
-                '[LIKELAB] $name code=${body['code']} msg=${body['message']}');
-          } else {
-            DiagLog.write('[LIKELAB] $name non-JSON(${res.runtimeType})');
-          }
-        } catch (e) {
-          DiagLog.write('[LIKELAB] $name exception=$e');
-        }
-      }
-
-      // A 当前形态：form、默认UA
-      Future<dynamic> a(int like) => Request().post(Api.likeVideo,
-          data: {'bvid': bvid, 'like': like, 'csrf': csrf});
-      await variant('A-form-noUA-like', () => a(1));
-      await variant('A-form-noUA-unlike', () => a(2));
-
-      // B 仅加浏览器UA
-      Future<dynamic> b(int like) => Request().post(
-          Api.likeVideo,
-          data: {'bvid': bvid, 'like': like, 'csrf': csrf},
-          options: Options(headers: {'user-agent': webUA}));
-      await variant('B-form-webUA-like', () => b(1));
-      await variant('B-form-webUA-unlike', () => b(2));
-
-      // C 对齐现行web：wbi签名query + JSON body + 浏览器UA + 视频页referer
-      final Map<String, dynamic> signed = await WbiSign().makSign({
-        'platform': 'web',
-        'web_location': '333.1387',
-        'csrf': csrf,
-      });
-      Future<dynamic> c(int like) => Request().post(
-          Api.likeVideo,
-          queryParameters: {
-            'platform': 'web',
-            'web_location': '333.1387',
-            'csrf': csrf,
-            'w_rid': signed['w_rid'],
-            'wts': signed['wts'],
-          },
-          data: {'bvid': bvid, 'like': like},
-          options: Options(
-              contentType: Headers.jsonContentType,
-              headers: {
-                'user-agent': webUA,
-                'referer': 'https://www.bilibili.com/video/$bvid/',
-              }));
-      await variant('C-wbi-json-like', () => c(1));
-      await variant('C-wbi-json-unlike', () => c(2));
-
-      // ===== 第二轮（round2）：补 Origin 等缺失要素 =====
-      const String origin = 'https://www.bilibili.com';
-      final Map<String, String> webHdrs = {
-        'user-agent': webUA,
-        'origin': origin,
-        'referer': 'https://www.bilibili.com/video/$bvid/',
-      };
-
-      // D form + webUA + Origin + referer
-      Future<dynamic> d(int like) => Request().post(Api.likeVideo,
-          data: {'bvid': bvid, 'like': like, 'csrf': csrf},
-          options: Options(headers: webHdrs));
-      await variant('D2-form-origin-like', () => d(1));
-      await variant('D2-form-origin-unlike', () => d(2));
-
-      // G 全参数进query并整体wbi签名，无body（签名必须用实际like值现算）
-      Future<Map<String, dynamic>> gq(int like) => WbiSign().makSign({
-            'bvid': bvid,
-            'like': like,
-            'platform': 'web',
-            'web_location': '333.1387',
-            'csrf': csrf,
-          });
-      Future<dynamic> g(int like) async => Request().post(Api.likeVideo,
-          queryParameters: await gq(like),
-          options: Options(headers: webHdrs));
-
-      await variant('D2-fullquery-wbi-like', () => g(1));
-      await variant('D2-fullquery-wbi-unlike', () => g(2));
-
-      // H 同C形状但补Origin（C失败可能因缺Origin被判参数错）
-      Future<dynamic> h(int like) => Request().post(
-          Api.likeVideo,
-          queryParameters: {
-            'platform': 'web',
-            'web_location': '333.1387',
-            'csrf': csrf,
-            'w_rid': signed['w_rid'],
-            'wts': signed['wts'],
-          },
-          data: {'bvid': bvid, 'like': like},
-          options: Options(
-              contentType: Headers.jsonContentType, headers: webHdrs));
-      await variant('D2-wbi-json-origin-like', () => h(1));
-      await variant('D2-wbi-json-origin-unlike', () => h(2));
-
-      // J 双保险：签名query带全部参数 + form body 再带一份
-      Future<dynamic> j(int like) async => Request().post(Api.likeVideo,
-          queryParameters: await gq(like),
-          data: {'bvid': bvid, 'like': like, 'csrf': csrf},
-          options: Options(headers: webHdrs));
-
-      await variant('D2-query-and-form-like', () => j(1));
-      await variant('D2-query-and-form-unlike', () => j(2));
-
-      // K 软拒绝验证：点赞→回读→取消→回读，确认-403下操作是否实际生效
-      await variant('D3-g-like', () => g(1));
-      final bool afterLike = await hasLiked(bvid);
-      DiagLog.write('[LIKELAB] D3-has-like-after=$afterLike');
-      await variant('D3-g-unlike', () => g(2));
-      final bool afterUnlike = await hasLiked(bvid);
-      DiagLog.write('[LIKELAB] D3-has-like-afterUnlike=$afterUnlike');
-    } catch (e) {
-      DiagLog.write('[LIKELAB] fatal $e');
     }
   }
 

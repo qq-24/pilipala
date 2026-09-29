@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
+import 'package:get/get.dart';
 import 'package:hive/hive.dart';
 import 'package:pilipala/http/member.dart';
 import 'package:pilipala/http/video.dart';
 import 'package:pilipala/models/common/rcmd_type.dart';
 import 'package:pilipala/models/user/info.dart';
+import 'package:pilipala/pages/rcmd/controller.dart';
 import 'package:pilipala/pages/setting/widgets/select_dialog.dart';
 import 'package:pilipala/utils/recommend_filter.dart';
 import 'package:pilipala/utils/storage.dart';
@@ -78,49 +80,64 @@ class _RecommendSettingState extends State<RecommendSetting> {
                   );
                 },
               );
-              if (result != null) {
-                if (result == 'app') {
-                  // app端推荐需要access_key
-                  if (accessKeyInfo == null) {
-                    if (!userLogin) {
-                      SmartDialog.showToast('请先登录');
-                      return;
-                    }
-                    // 显示一个确认框，告知用户可能会导致账号被风控
-                    SmartDialog.show(
-                        animationType: SmartAnimationType.centerFade_otherSlide,
-                        builder: (context) {
-                          return AlertDialog(
-                            title: const Text('提示'),
-                            content: const Text(
-                                '使用app端推荐需获取access_key，有小概率触发风控导致账号退出（在官方版本app重新登录即可解除），是否继续？'),
-                            actions: [
-                              TextButton(
-                                onPressed: () {
-                                  result = null;
-                                  SmartDialog.dismiss();
-                                },
-                                child: const Text('取消'),
-                              ),
-                              TextButton(
-                                onPressed: () async {
-                                  SmartDialog.dismiss();
-                                  await MemberHttp.cookieToKey();
-                                },
-                                child: const Text('确定'),
-                              ),
-                            ],
-                          );
-                        });
-                  }
+              if (result == null || result == defaultRcmdType) return;
+              if (!context.mounted) return;
+              if (result == 'app') {
+                if (!userLogin) {
+                  SmartDialog.showToast('请先登录');
+                  return;
                 }
-                if (result != null) {
-                  defaultRcmdType = result;
-                  setting.put(SettingBoxKey.defaultRcmdType, result);
-                  SmartDialog.showToast('下次启动时生效');
-                  setState(() {});
+                // 切到app端每次都确认：小票缺失/换过号时提示风控风险，已有有效小票只做告知
+                final bool needKey = accessKeyInfo == null ||
+                    (userInfo != null &&
+                        '${accessKeyInfo['mid']}' != '${userInfo!.mid}');
+                final bool? go = await showDialog<bool>(
+                  context: context,
+                  builder: (context) {
+                    return AlertDialog(
+                      title: const Text('切换到app端推荐'),
+                      content: Text(needKey
+                          ? '使用app端推荐需获取access_key，有小概率触发风控导致账号退出（在官方版本app重新登录即可解除），是否继续？'
+                          : '当前access_key有效，切换后立即生效，推荐将变为app端个性化内容，是否继续？'),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.of(context).pop(false),
+                          child: const Text('取消'),
+                        ),
+                        TextButton(
+                          onPressed: () => Navigator.of(context).pop(true),
+                          child: const Text('确定'),
+                        ),
+                      ],
+                    );
+                  },
+                );
+                if (go != true) return;
+                if (needKey) {
+                  await MemberHttp.cookieToKey();
+                  accessKeyInfo =
+                      localCache.get(LocalCacheKey.accessKey, defaultValue: null);
                 }
               }
+              defaultRcmdType = result;
+              setting.put(SettingBoxKey.defaultRcmdType, result);
+              // 首页控制器还在就热切换立即生效，否则下次启动生效
+              if (Get.isRegistered<RcmdController>()) {
+                SmartDialog.showLoading(msg: '切换中…');
+                try {
+                  await Get.find<RcmdController>()
+                      .switchRcmdType(result)
+                      .timeout(const Duration(seconds: 30));
+                  SmartDialog.showToast('已切换为「$result端」推荐');
+                } catch (_) {
+                  SmartDialog.showToast('切换超时，已保存，下次启动生效');
+                } finally {
+                  SmartDialog.dismiss();
+                }
+              } else {
+                SmartDialog.showToast('下次启动时生效');
+              }
+              setState(() {});
             },
           ),
           const SetSwitchItem(

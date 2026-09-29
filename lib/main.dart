@@ -12,8 +12,6 @@ import 'package:hive/hive.dart';
 import 'package:pilipala/common/widgets/custom_toast.dart';
 import 'package:pilipala/http/common.dart';
 import 'package:pilipala/http/init.dart';
-import 'package:pilipala/http/user.dart';
-import 'package:pilipala/utils/diag_log.dart';
 import 'package:pilipala/models/common/color_type.dart';
 import 'package:pilipala/models/common/theme_type.dart';
 import 'package:pilipala/pages/search/index.dart';
@@ -309,27 +307,6 @@ class BuildMainApp extends StatelessWidget {
         RecommendFilter();
         Data.init();
         setupServiceLocator();
-        // 启动后自动登录态自检，写入diag.log，可由adb直接读取（无需人工操作）
-        Future.delayed(const Duration(seconds: 10), () async {
-          DiagLog.write('selfcheck scheduled fire');
-          // 记录App真实出口IP（与点赞请求同一网络通道），用于和PC出口对比
-          try {
-            final r = await Request().get('https://api.ip.sb/jsonip');
-            DiagLog.write('[MYIP] app exit: ${r.data}');
-          } catch (e) {
-            DiagLog.write('[MYIP] error: $e');
-          }
-          try {
-            final rows = await UserHttp.loginSelfCheck();
-            for (var r in rows) {
-              DiagLog.write(
-                  '[SELFCHK] ${r['name']} | code=${r['code']} | ${r['msg']}');
-            }
-          } catch (e) {
-            DiagLog.write('[SELFCHK] error: $e');
-          }
-          // 点赞形态实验已停用：避免重复触发点赞风控（自伤）。如需重启研究，手动调用 VideoHttp.likeLab()
-        });
       },
     );
   }
