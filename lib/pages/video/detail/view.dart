@@ -521,8 +521,16 @@ class _VideoDetailPageState extends State<VideoDetailPage>
     // 横屏
     final bool isLandscape = orientation == Orientation.landscape;
     final Rx<bool> isFullScreen = plPlayerController?.isFullScreen ?? false.obs;
+    // 横屏分屏：横屏且非真全屏、宽度足够（手机横屏/平板均可触发）时，左播放器右内容并排
+    final bool landscapeSplit = isLandscape &&
+        !isFullScreen.value &&
+        sizeContext.width >= 600;
     // 全屏时高度撑满
-    if (isLandscape || isFullScreen.value) {
+    if (landscapeSplit) {
+      // 分屏模式不劫持系统UI，播放器占满左列高度
+      videoHeight.value = Get.size.height;
+      exitFullScreen();
+    } else if (isLandscape || isFullScreen.value) {
       videoHeight.value = Get.size.height;
       enterFullScreen();
     } else {
@@ -633,6 +641,62 @@ class _VideoDetailPageState extends State<VideoDetailPage>
       );
     }
 
+    /// 内容列（顶栏+简介/评论tab），横屏分屏右侧与嵌套滚动 body 复用同一份
+    Widget contentColumn = Column(
+      children: [
+        tabbarBuild(),
+        Expanded(
+          child: TabBarView(
+            controller: vdCtr.tabCtr,
+            children: <Widget>[
+              Builder(
+                builder: (BuildContext context) {
+                  return CustomScrollView(
+                    key: const PageStorageKey<String>('简介'),
+                    slivers: <Widget>[
+                      if (vdCtr.videoType == SearchType.video) ...[
+                        VideoIntroPanel(bvid: vdCtr.bvid),
+                      ] else if (vdCtr.videoType ==
+                          SearchType.media_bangumi) ...[
+                        Obx(() =>
+                            BangumiIntroPanel(cid: vdCtr.cid.value)),
+                      ],
+                      SliverToBoxAdapter(
+                        child: Divider(
+                          indent: 12,
+                          endIndent: 12,
+                          color: Theme.of(context)
+                              .dividerColor
+                              .withOpacity(0.06),
+                        ),
+                      ),
+                      if (vdCtr.videoType == SearchType.video &&
+                          vdCtr.enableRelatedVideo)
+                        const RelatedVideoPanel(),
+                    ],
+                  );
+                },
+              ),
+              if ((vdCtr.videoType == SearchType.media_bangumi &&
+                      GlobalDataCache.enableComment
+                          .contains('bangumi')) ||
+                  (vdCtr.videoType == SearchType.video &&
+                      GlobalDataCache.enableComment
+                          .contains('video'))) ...[
+                Obx(
+                  () => VideoReplyPanel(
+                    bvid: vdCtr.bvid,
+                    oid: vdCtr.oid.value,
+                    onControllerCreated: vdCtr.onControllerCreated,
+                  ),
+                )
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+
     Widget childWhenDisabled = SafeArea(
       top: isPortrait && isFullScreen.value,
       bottom: isPortrait && isFullScreen.value,
@@ -651,7 +715,31 @@ class _VideoDetailPageState extends State<VideoDetailPage>
                 builder: buildAppBar,
               ),
             ),
-            body: ExtendedNestedScrollView(
+            body: landscapeSplit
+                ? Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(
+                        flex: 3,
+                        child: ColoredBox(
+                          color: Colors.black,
+                          child: Obx(
+                            () => isShowing.value
+                                ? buildVideoPlayerPanel()
+                                : const SizedBox(),
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        flex: 2,
+                        child: ColoredBox(
+                          color: Theme.of(context).scaffoldBackgroundColor,
+                          child: contentColumn,
+                        ),
+                      ),
+                    ],
+                  )
+                : ExtendedNestedScrollView(
               controller: _extendNestCtr,
               headerSliverBuilder:
                   (BuildContext context2, bool innerBoxIsScrolled) {
@@ -757,60 +845,7 @@ class _VideoDetailPageState extends State<VideoDetailPage>
                         : pinnedHeaderHeight;
               },
               onlyOneScrollInBody: true,
-              body: Column(
-                children: [
-                  tabbarBuild(),
-                  Expanded(
-                    child: TabBarView(
-                      controller: vdCtr.tabCtr,
-                      children: <Widget>[
-                        Builder(
-                          builder: (BuildContext context) {
-                            return CustomScrollView(
-                              key: const PageStorageKey<String>('简介'),
-                              slivers: <Widget>[
-                                if (vdCtr.videoType == SearchType.video) ...[
-                                  VideoIntroPanel(bvid: vdCtr.bvid),
-                                ] else if (vdCtr.videoType ==
-                                    SearchType.media_bangumi) ...[
-                                  Obx(() =>
-                                      BangumiIntroPanel(cid: vdCtr.cid.value)),
-                                ],
-                                SliverToBoxAdapter(
-                                  child: Divider(
-                                    indent: 12,
-                                    endIndent: 12,
-                                    color: Theme.of(context)
-                                        .dividerColor
-                                        .withOpacity(0.06),
-                                  ),
-                                ),
-                                if (vdCtr.videoType == SearchType.video &&
-                                    vdCtr.enableRelatedVideo)
-                                  const RelatedVideoPanel(),
-                              ],
-                            );
-                          },
-                        ),
-                        if ((vdCtr.videoType == SearchType.media_bangumi &&
-                                GlobalDataCache.enableComment
-                                    .contains('bangumi')) ||
-                            (vdCtr.videoType == SearchType.video &&
-                                GlobalDataCache.enableComment
-                                    .contains('video'))) ...[
-                          Obx(
-                            () => VideoReplyPanel(
-                              bvid: vdCtr.bvid,
-                              oid: vdCtr.oid.value,
-                              onControllerCreated: vdCtr.onControllerCreated,
-                            ),
-                          )
-                        ],
-                      ],
-                    ),
-                  ),
-                ],
-              ),
+              body: contentColumn,
             ),
           ),
 
