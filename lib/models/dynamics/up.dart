@@ -1,4 +1,4 @@
-// JSON安全数值转换：B站接口字段类型漂移(String<->int)不再引发崩溃
+// ===== 类型漂移安全转换（B站字段 String<->num 漂移防御） =====
 int? asInt(dynamic v) {
   if (v == null) return null;
   if (v is int) return v;
@@ -13,6 +13,20 @@ double asDouble(dynamic v, [double fallback = 0]) {
   if (v is int) return v.toDouble();
   if (v is String) return double.tryParse(v) ?? fallback;
   return fallback;
+}
+
+String? asStr(dynamic v) {
+  if (v == null) return null;
+  if (v is String) return v;
+  return v.toString();
+}
+
+bool? asBool(dynamic v) {
+  if (v == null) return null;
+  if (v is bool) return v;
+  if (v is num) return v != 0;
+  if (v is String) return v == 'true' || v == '1';
+  return null;
 }
 
 class FollowUpModel {
@@ -57,7 +71,7 @@ class LiveUsers {
 
   LiveUsers.fromJson(Map<String, dynamic> json) {
     count = asInt(json['count']);
-    group = json['group'];
+    group = asStr(json['group']);
     items = json['items']
         .map<LiveUserItem>((e) => LiveUserItem.fromJson(e))
         .toList();
@@ -86,13 +100,13 @@ class LiveUserItem {
   String type = 'live';
 
   LiveUserItem.fromJson(Map<String, dynamic> json) {
-    face = json['face'];
-    isReserveRecall = json['is_reserve_recall'];
-    jumpUrl = json['jump_url'];
+    face = asStr(json['face']);
+    isReserveRecall = asBool(json['is_reserve_recall']);
+    jumpUrl = asStr(json['jump_url']);
     mid = asInt(json['mid']);
     roomId = asInt(json['room_id']);
-    title = json['title'];
-    uname = json['uname'];
+    title = asStr(json['title']);
+    uname = asStr(json['uname']);
   }
 }
 
@@ -113,11 +127,11 @@ class UpItem {
   String type = 'up';
 
   UpItem.fromJson(Map<String, dynamic> json) {
-    face = json['face'];
-    hasUpdate = json['has_update'];
-    isReserveRecall = json['is_reserve_recall'];
+    face = asStr(json['face']);
+    hasUpdate = asBool(json['has_update']);
+    isReserveRecall = asBool(json['is_reserve_recall']);
     mid = asInt(json['mid']);
-    uname = json['uname'];
+    uname = asStr(json['uname']);
   }
 }
 
@@ -133,8 +147,8 @@ class MyInfo {
   String? name;
 
   MyInfo.fromJson(Map<String, dynamic> json) {
-    face = json['face'];
+    face = asStr(json['face']);
     mid = asInt(json['mid']);
-    name = json['name'];
+    name = asStr(json['name']);
   }
 }
