@@ -54,8 +54,13 @@ class NetworkImgLayer extends StatelessWidget {
     if (src == '' || src == null) {
       return placeholder(context);
     }
-    final String imageUrl =
-        '${src!.startsWith('//') ? 'https:${src!}' : src!}@${quality ?? defaultImgQuality}q.webp';
+    String imageUrl = src!.startsWith('//') ? 'https:${src!}' : src!;
+    // opus 正文图有一部分 B 站下发的是 http://，而 targetSdk 34 默认禁明文，
+    // 图片会静默加载失败；hdslb 同一对象 https 可直接取（实测字节数一致）
+    if (imageUrl.startsWith('http://') && imageUrl.contains('hdslb.com')) {
+      imageUrl = imageUrl.replaceFirst('http://', 'https://');
+    }
+    imageUrl = '$imageUrl@${quality ?? defaultImgQuality}q.webp';
     int? memCacheWidth, memCacheHeight;
     double aspectRatio = (width / height).toDouble();
 

@@ -123,7 +123,8 @@ class VideoCardV extends StatelessWidget {
     }
     if (uri.isEmpty) {
       return isStringNumeric(param)
-          ? PictureJump('opus',
+          ? PictureJump('dynamicDetail',
+              id: param,
               parameters: {'title': title, 'id': param, 'articleType': 'opus'})
           : const PictureJump('none');
     }
@@ -139,7 +140,11 @@ class VideoCardV extends StatelessWidget {
     final String id = numbers.isEmpty ? '' : '${numbers.first}';
     if (id.isNotEmpty) {
       if (kind == 'opus') {
-        return PictureJump('opus',
+        // 图文动态走动态详情页：主体图挂在 major.opus.pics 上，只有动态详情页会画；
+        // opus 阅读器只渲染文章段落里的插图，也没有作者面板与点赞/评论栏。
+        // parameters 留给详情接口取不到时兜底转投 opus 阅读器。
+        return PictureJump('dynamicDetail',
+            id: id,
             parameters: {'title': title, 'id': id, 'articleType': 'opus'});
       }
       if (kind == 'article' || kind == 'read') {
@@ -163,9 +168,6 @@ class VideoCardV extends StatelessWidget {
     );
     DiagLog.write('[PIC_JUMP] ${jump.route} id=${jump.id} uri=$uri');
     switch (jump.route) {
-      case 'opus':
-        Get.toNamed('/opus', parameters: jump.parameters);
-        break;
       case 'read':
         Get.toNamed('/read', parameters: jump.parameters);
         break;
@@ -177,6 +179,10 @@ class VideoCardV extends StatelessWidget {
             'floor': 1,
             'action': 'detail',
           });
+        } else if (jump.parameters.isNotEmpty) {
+          DiagLog.write(
+              '[PIC_JUMP] detail失败 id=${jump.id} msg=${res['msg']} -> 转 opus');
+          Get.toNamed('/opus', parameters: jump.parameters);
         } else {
           SmartDialog.showToast('${res['msg']}');
         }
