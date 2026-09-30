@@ -138,3 +138,8 @@ app.*.symbols
 # 发布签名文件（本地私有，不得提交）
 android/key.properties
 *.jks
+# 本机日志与构建产物（含本机路径/账号ID，不入库）
+dbg_log.txt
+gradle_deps.txt
+release_log.txt
+android/build/
