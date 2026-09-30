@@ -2,6 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:pilipala/models/read/opus.dart';
 
 class TextHelper {
+  // B站偶尔下发非 6 位十六进制色值，直接 substring(1,7) 会 RangeError 把整页带崩
+  static Color? parseColor(String? raw) {
+    if (raw == null) return null;
+    final String hex = raw.replaceFirst('#', '').replaceFirst('0x', '');
+    if (hex.length != 6) return null;
+    final int? value = int.tryParse(hex, radix: 16);
+    return value == null ? null : Color(value + 0xFF000000);
+  }
+
   static Alignment getAlignment(int? align) {
     switch (align) {
       case 1:
@@ -28,10 +37,8 @@ class TextHelper {
               ? FontWeight.bold
               : FontWeight.normal,
           height: align == 1 ? 2 : 1.5,
-          color: node.word?.color != null
-              ? Color(int.parse(node.word!.color!.substring(1, 7), radix: 16) +
-                  0xFF000000)
-              : Theme.of(context).colorScheme.onBackground,
+          color: parseColor(node.word?.color) ??
+              Theme.of(context).colorScheme.onBackground,
         ),
       );
     } else {
@@ -47,11 +54,8 @@ class TextHelper {
                   ? FontWeight.bold
                   : FontWeight.normal,
               height: align == 1 ? 2 : 1.5,
-              color: node.word?.color != null
-                  ? Color(
-                      int.parse(node.word!.color!.substring(1, 7), radix: 16) +
-                          0xFF000000)
-                  : Theme.of(context).colorScheme.onBackground,
+              color: parseColor(node.word?.color) ??
+                  Theme.of(context).colorScheme.onBackground,
             ),
           );
         default:

@@ -1,3 +1,44 @@
+// ===== 类型漂移安全转换（B站字段 String<->num 漂移防御） =====
+// 与 lib/models/dynamics/result.dart 同一套：opus 接口的 basic.uid 实际是 String，
+// 而字段声明是 int?，直接赋值会在 fromJson 里抛 'is not a subtype of'，整页空白。
+int? asInt(dynamic v) {
+  if (v == null) return null;
+  if (v is int) return v;
+  if (v is double) return v.toInt();
+  if (v is String) return int.tryParse(v);
+  return null;
+}
+
+double asDouble(dynamic v, [double fallback = 0]) {
+  if (v == null) return fallback;
+  if (v is double) return v;
+  if (v is int) return v.toDouble();
+  if (v is String) return double.tryParse(v) ?? fallback;
+  return fallback;
+}
+
+String? asStr(dynamic v) {
+  if (v == null) return null;
+  if (v is String) return v;
+  return v.toString();
+}
+
+bool? asBool(dynamic v) {
+  if (v == null) return null;
+  if (v is bool) return v;
+  if (v is num) return v != 0;
+  if (v is String) return v == 'true' || v == '1';
+  return null;
+}
+
+Map<String, dynamic>? asMap(dynamic v) => v is Map
+    ? Map<String, dynamic>.from(v)
+    : null;
+
+List<Map<String, dynamic>> asMapList(dynamic v) => v is List
+    ? v.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList()
+    : <Map<String, dynamic>>[];
+
 class OpusDataModel {
   OpusDataModel({
     this.id,
@@ -14,13 +55,12 @@ class OpusDataModel {
   String? themeMode;
 
   OpusDataModel.fromJson(Map<String, dynamic> json) {
-    id = json['id'];
-    detail = json['detail'] != null
-        ? OpusDetailDataModel.fromJson(json['detail'])
-        : null;
-    type = json['type'];
-    theme = json['theme'];
-    themeMode = json['themeMode'];
+    id = asStr(json['id'] ?? json['id_str']);
+    final detailJson = asMap(json['detail']);
+    detail = detailJson != null ? OpusDetailDataModel.fromJson(detailJson) : null;
+    type = asInt(json['type']);
+    theme = asStr(json['theme']);
+    themeMode = asStr(json['themeMode']);
   }
 }
 
@@ -38,15 +78,14 @@ class OpusDetailDataModel {
   int? type;
 
   OpusDetailDataModel.fromJson(Map<String, dynamic> json) {
-    basic = json['basic'] != null ? Basic.fromJson(json['basic']) : null;
-    idStr = json['id_str'];
-    if (json['modules'] != null) {
-      modules = <OpusModuleDataModel>[];
-      json['modules'].forEach((v) {
-        modules!.add(OpusModuleDataModel.fromJson(v));
-      });
+    final basicJson = asMap(json['basic']);
+    basic = basicJson != null ? Basic.fromJson(basicJson) : null;
+    idStr = asStr(json['id_str']);
+    final list = asMapList(json['modules']);
+    if (list.isNotEmpty) {
+      modules = list.map((v) => OpusModuleDataModel.fromJson(v)).toList();
     }
-    type = json['type'];
+    type = asInt(json['type']);
   }
 }
 
@@ -66,11 +105,11 @@ class Basic {
   int? uid;
 
   Basic.fromJson(Map<String, dynamic> json) {
-    commentIdStr = json['comment_id_str'];
-    commentType = json['comment_type'];
-    ridStr = json['rid_str'];
-    title = json['title'];
-    uid = json['uid'];
+    commentIdStr = asStr(json['comment_id_str']);
+    commentType = asInt(json['comment_type']);
+    ridStr = asStr(json['rid_str']);
+    title = asStr(json['title']);
+    uid = asInt(json['uid']);
   }
 }
 
@@ -93,27 +132,25 @@ class OpusModuleDataModel {
   ModuleStat? moduleStat;
 
   OpusModuleDataModel.fromJson(Map<String, dynamic> json) {
-    moduleTop = json['module_top'] != null
-        ? ModuleTop.fromJson(json['module_top'])
-        : null;
-    moduleTitle = json['module_title'] != null
-        ? ModuleTitle.fromJson(json['module_title'])
-        : null;
-    moduleAuthor = json['module_author'] != null
-        ? ModuleAuthor.fromJson(json['module_author'])
-        : null;
-    moduleContent = json['module_content'] != null
-        ? ModuleContent.fromJson(json['module_content'])
-        : null;
-    moduleExtend = json['module_extend'] != null
-        ? ModuleExtend.fromJson(json['module_extend'])
-        : null;
-    moduleBottom = json['module_bottom'] != null
-        ? ModuleBottom.fromJson(json['module_bottom'])
-        : null;
-    moduleStat = json['module_stat'] != null
-        ? ModuleStat.fromJson(json['module_stat'])
-        : null;
+    final topJson = asMap(json['module_top']);
+    moduleTop = topJson != null ? ModuleTop.fromJson(topJson) : null;
+    final titleJson = asMap(json['module_title']);
+    moduleTitle =
+        titleJson != null ? ModuleTitle.fromJson(titleJson) : null;
+    final authorJson = asMap(json['module_author']);
+    moduleAuthor =
+        authorJson != null ? ModuleAuthor.fromJson(authorJson) : null;
+    final contentJson = asMap(json['module_content']);
+    moduleContent =
+        contentJson != null ? ModuleContent.fromJson(contentJson) : null;
+    final extendJson = asMap(json['module_extend']);
+    moduleExtend =
+        extendJson != null ? ModuleExtend.fromJson(extendJson) : null;
+    final bottomJson = asMap(json['module_bottom']);
+    moduleBottom =
+        bottomJson != null ? ModuleBottom.fromJson(bottomJson) : null;
+    final statJson = asMap(json['module_stat']);
+    moduleStat = statJson != null ? ModuleStat.fromJson(statJson) : null;
   }
 }
 
@@ -127,8 +164,8 @@ class ModuleTop {
   Map? video;
 
   ModuleTop.fromJson(Map<String, dynamic> json) {
-    type = json['type'];
-    video = json['video'];
+    type = asInt(json['type']);
+    video = json['video'] is Map ? json['video'] as Map : null;
   }
 }
 
@@ -140,7 +177,7 @@ class ModuleTitle {
   String? text;
 
   ModuleTitle.fromJson(Map<String, dynamic> json) {
-    text = json['text'];
+    text = asStr(json['text']);
   }
 }
 
@@ -158,10 +195,11 @@ class ModuleAuthor {
   String? pubTime;
 
   ModuleAuthor.fromJson(Map<String, dynamic> json) {
-    face = json['face'];
-    mid = json['mid'];
-    name = json['name'];
-    pubTime = json['pub_time'];
+    final avatar = asMap(json['avatar']);
+    face = asStr(json['face'] ?? avatar?['face_url'] ?? avatar?['src']);
+    mid = asInt(json['mid'] ?? avatar?['mid']);
+    name = asStr(json['name'] ?? avatar?['name']);
+    pubTime = asStr(json['pub_time']);
   }
 }
 
@@ -175,13 +213,11 @@ class ModuleContent {
   String? moduleType;
 
   ModuleContent.fromJson(Map<String, dynamic> json) {
-    if (json['paragraphs'] != null) {
-      paragraphs = <ModuleParagraph>[];
-      json['paragraphs'].forEach((v) {
-        paragraphs!.add(ModuleParagraph.fromJson(v));
-      });
+    final list = asMapList(json['paragraphs']);
+    if (list.isNotEmpty) {
+      paragraphs = list.map((v) => ModuleParagraph.fromJson(v)).toList();
     }
-    moduleType = json['module_type'];
+    moduleType = asStr(json['module_type']);
   }
 }
 
@@ -201,16 +237,16 @@ class ModuleParagraph {
   LinkCard? linkCard;
 
   ModuleParagraph.fromJson(Map<String, dynamic> json) {
-    align = json['align'];
+    align = asInt(json['align']);
     paraType = json['para_type'] == null && json['link_card'] != null
         ? 3
-        : json['para_type'];
-    pic = json['pic'] != null ? Pics.fromJson(json['pic']) : null;
-    text = json['text'] != null
-        ? ModuleParagraphText.fromJson(json['text'])
-        : null;
-    linkCard =
-        json['link_card'] != null ? LinkCard.fromJson(json['link_card']) : null;
+        : asInt(json['para_type']);
+    final picJson = asMap(json['pic']);
+    pic = picJson != null ? Pics.fromJson(picJson) : null;
+    final textJson = asMap(json['text']);
+    text = textJson != null ? ModuleParagraphText.fromJson(textJson) : null;
+    final cardJson = asMap(json['link_card']);
+    linkCard = cardJson != null ? LinkCard.fromJson(cardJson) : null;
   }
 }
 
@@ -224,13 +260,11 @@ class Pics {
   int? style;
 
   Pics.fromJson(Map<String, dynamic> json) {
-    if (json['pics'] != null) {
-      pics = <Pic>[];
-      json['pics'].forEach((v) {
-        pics!.add(Pic.fromJson(v));
-      });
+    final list = asMapList(json['pics']);
+    if (list.isNotEmpty) {
+      pics = list.map((v) => Pic.fromJson(v)).toList();
     }
-    style = json['style'];
+    style = asInt(json['style']);
   }
 }
 
@@ -252,12 +286,18 @@ class Pic {
   double? scale;
 
   Pic.fromJson(Map<String, dynamic> json) {
-    height = json['height'];
-    size = json['size'];
-    url = json['url'];
-    width = json['width'];
-    aspectRatio = json['width'] / json['height'];
-    scale = customDivision(json['width'], 600);
+    height = asInt(json['height']);
+    size = asDouble(json['size']);
+    url = asStr(json['url']);
+    width = asInt(json['width']);
+    // 宽高缺失或为 0 时不做除法，否则整个详情解析会直接抛异常
+    if (height != null && width != null && height! > 0) {
+      aspectRatio = width! / height!;
+      scale = customDivision(width!, height);
+    } else {
+      aspectRatio = 0;
+      scale = 0;
+    }
   }
 }
 
@@ -277,11 +317,12 @@ class LinkCard {
   String? title;
 
   LinkCard.fromJson(Map<String, dynamic> json) {
-    cover = json['card']['cover'];
-    descSecond = json['card']['desc_second'];
-    duration = json['card']['duration'];
-    jumpUrl = json['card']['jump_url'];
-    title = json['card']['title'];
+    final card = asMap(json['card']) ?? json;
+    cover = asStr(card['cover']);
+    descSecond = asStr(card['desc_second']);
+    duration = asStr(card['duration']);
+    jumpUrl = asStr(card['jump_url']);
+    title = asStr(card['title']);
   }
 }
 
@@ -293,11 +334,9 @@ class ModuleParagraphText {
   List<ModuleParagraphTextNode>? nodes;
 
   ModuleParagraphText.fromJson(Map<String, dynamic> json) {
-    if (json['nodes'] != null) {
-      nodes = <ModuleParagraphTextNode>[];
-      json['nodes'].forEach((v) {
-        nodes!.add(ModuleParagraphTextNode.fromJson(v));
-      });
+    final list = asMapList(json['nodes']);
+    if (list.isNotEmpty) {
+      nodes = list.map((v) => ModuleParagraphTextNode.fromJson(v)).toList();
     }
   }
 }
@@ -314,10 +353,11 @@ class ModuleParagraphTextNode {
   ModuleParagraphTextNodeWord? word;
 
   ModuleParagraphTextNode.fromJson(Map<String, dynamic> json) {
-    type = json['type'];
-    nodeType = json['node_type'];
-    word = json['word'] != null
-        ? ModuleParagraphTextNodeWord.fromJson(json['word'])
+    type = asStr(json['type']);
+    nodeType = asInt(json['node_type']);
+    final wordJson = asMap(json['word']);
+    word = wordJson != null
+        ? ModuleParagraphTextNodeWord.fromJson(wordJson)
         : null;
   }
 }
@@ -336,12 +376,13 @@ class ModuleParagraphTextNodeWord {
   String? words;
 
   ModuleParagraphTextNodeWord.fromJson(Map<String, dynamic> json) {
-    color = json['color'];
-    fontSize = json['font_size'];
-    style = json['style'] != null
-        ? ModuleParagraphTextNodeWordStyle.fromJson(json['style'])
+    color = asStr(json['color']);
+    fontSize = asInt(json['font_size']);
+    final styleJson = asMap(json['style']);
+    style = styleJson != null
+        ? ModuleParagraphTextNodeWordStyle.fromJson(styleJson)
         : null;
-    words = json['words'];
+    words = asStr(json['words']);
   }
 }
 
@@ -353,7 +394,7 @@ class ModuleParagraphTextNodeWordStyle {
   bool? bold;
 
   ModuleParagraphTextNodeWordStyle.fromJson(Map<String, dynamic> json) {
-    bold = json['bold'];
+    bold = asBool(json['bold']);
   }
 }
 
@@ -365,11 +406,9 @@ class ModuleExtend {
   List<ModuleExtendItem>? items;
 
   ModuleExtend.fromJson(Map<String, dynamic> json) {
-    if (json['items'] != null) {
-      items = <ModuleExtendItem>[];
-      json['items'].forEach((v) {
-        items!.add(ModuleExtendItem.fromJson(v));
-      });
+    final list = asMapList(json['items']);
+    if (list.isNotEmpty) {
+      items = list.map((v) => ModuleExtendItem.fromJson(v)).toList();
     }
   }
 }
@@ -391,10 +430,10 @@ class ModuleExtendItem {
 
   ModuleExtendItem.fromJson(Map<String, dynamic> json) {
     bizId = json['biz_id'];
-    bizType = json['biz_type'];
+    bizType = asInt(json['biz_type']);
     icon = json['icon'];
-    jumpUrl = json['jump_url'];
-    text = json['text'];
+    jumpUrl = asStr(json['jump_url']);
+    text = asStr(json['text']);
   }
 }
 
@@ -406,9 +445,8 @@ class ModuleBottom {
   ShareInfo? shareInfo;
 
   ModuleBottom.fromJson(Map<String, dynamic> json) {
-    shareInfo = json['share_info'] != null
-        ? ShareInfo.fromJson(json['share_info'])
-        : null;
+    final shareJson = asMap(json['share_info']);
+    shareInfo = shareJson != null ? ShareInfo.fromJson(shareJson) : null;
   }
 }
 
@@ -424,9 +462,9 @@ class ShareInfo {
   String? title;
 
   ShareInfo.fromJson(Map<String, dynamic> json) {
-    pic = json['pic'];
-    summary = json['summary'];
-    title = json['title'];
+    pic = asStr(json['pic']);
+    summary = asStr(json['summary']);
+    title = asStr(json['title']);
   }
 }
 
@@ -446,14 +484,16 @@ class ModuleStat {
   StatItem? like;
 
   ModuleStat.fromJson(Map<String, dynamic> json) {
-    coin = json['coin'] != null ? StatItem.fromJson(json['coin']) : null;
-    comment =
-        json['comment'] != null ? StatItem.fromJson(json['comment']) : null;
-    favorite =
-        json['favorite'] != null ? StatItem.fromJson(json['favorite']) : null;
-    forward =
-        json['forward'] != null ? StatItem.fromJson(json['forward']) : null;
-    like = json['like'] != null ? StatItem.fromJson(json['like']) : null;
+    final coinJson = asMap(json['coin']);
+    coin = coinJson != null ? StatItem.fromJson(coinJson) : null;
+    final commentJson = asMap(json['comment']);
+    comment = commentJson != null ? StatItem.fromJson(commentJson) : null;
+    final favoriteJson = asMap(json['favorite']);
+    favorite = favoriteJson != null ? StatItem.fromJson(favoriteJson) : null;
+    final forwardJson = asMap(json['forward']);
+    forward = forwardJson != null ? StatItem.fromJson(forwardJson) : null;
+    final likeJson = asMap(json['like']);
+    like = likeJson != null ? StatItem.fromJson(likeJson) : null;
   }
 }
 
@@ -469,17 +509,16 @@ class StatItem {
   bool? status;
 
   StatItem.fromJson(Map<String, dynamic> json) {
-    count = json['count'];
-    forbidden = json['forbidden'];
-    status = json['status'];
+    count = asInt(json['count']);
+    forbidden = asBool(json['forbidden']);
+    status = asBool(json['status']);
   }
 }
 
-double customDivision(int a, int b) {
-  double result = a / b;
-  if (result < 1) {
-    return result;
-  } else {
-    return 1.0;
-  }
+double customDivision(dynamic a, dynamic b) {
+  final num x = a is num ? a : num.tryParse('$a') ?? 0;
+  final num y = b is num ? b : num.tryParse('$b') ?? 0;
+  if (y == 0) return 0;
+  final double result = x / y;
+  return result < 1 ? result : 1.0;
 }

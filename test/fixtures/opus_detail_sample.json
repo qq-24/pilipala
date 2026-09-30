@@ -1,0 +1,430 @@
+{
+ "id_str": "1226714729338109956",
+ "detail": {
+  "id_str": "1226714729338109956",
+  "basic": {
+   "comment_type": 11,
+   "comment_id_str": "402348667",
+   "title": "Liyuu工作室的动态 - 哔哩哔哩",
+   "uid": "3493257977792627",
+   "collection_id": "0",
+   "tribee": null,
+   "like_icon": {
+    "id": "0",
+    "start_url": "",
+    "action_url": "",
+    "end_url": ""
+   },
+   "editable": false,
+   "aigc": false,
+   "open_app_extra": "",
+   "rid_str": "402348667",
+   "article_type": 0,
+   "is_only_fans": false
+  },
+  "modules": [
+   {
+    "module_type": "MODULE_TYPE_AUTHOR",
+    "module_top": null,
+    "module_title": null,
+    "module_author": {
+     "type": "AUTHOR_TYPE_NORMAL",
+     "avatar": {
+      "container_size": {
+       "width": 1.375,
+       "height": 1.375
+      },
+      "layers": [],
+      "fallback_layers": {
+       "group_id": "",
+       "layers": [
+        {
+         "layer_id": "",
+         "visible": true,
+         "general_spec": {
+          "pos_spec": {
+           "coordinate_pos": 2,
+           "axis_x": 0.6875,
+           "axis_y": 0.6875
+          },
+          "size_spec": {
+           "width": 0.787,
+           "height": 0.787
+          },
+          "render_spec": {
+           "opacity": 1
+          }
+         },
+         "layer_config": {
+          "tags": {
+           "AVATAR_LAYER": {
+            "config_type": 0
+           }
+          },
+          "is_critical": true,
+          "allow_over_paint": false,
+          "layer_mask": {
+           "general_spec": {
+            "pos_spec": {
+             "coordinate_pos": 2,
+             "axis_x": 0.6875,
+             "axis_y": 0.6875
+            },
+            "size_spec": {
+             "width": 0.787,
+             "height": 0.787
+            },
+            "render_spec": {
+             "opacity": 1
+            }
+           },
+           "mask_src": {
+            "src_type": 3,
+            "placeholder": 0,
+            "draw": {
+             "draw_type": 1,
+             "fill_mode": 1,
+             "color_config": {
+              "is_dark_mode_aware": false,
+              "day": {
+               "argb": "#FF000000"
+              },
+              "night": null
+             },
+             "edge_weight": 0
+            }
+           }
+          }
+         },
+         "resource": {
+          "res_type": 3,
+          "res_image": {
+           "image_src": {
+            "src_type": 1,
+            "placeholder": 6,
+            "remote": {
+             "url": "https://i2.hdslb.com/bfs/face/ce4efa67d2b01cec89af2dc644e946e2c562d3b6.jpg",
+             "bfs_style": "widget-layer-avatar"
+            }
+           }
+          }
+         }
+        },
+        {
+         "layer_id": "",
+         "visible": true,
+         "general_spec": {
+          "pos_spec": {
+           "coordinate_pos": 2,
+           "axis_x": 0.6875,
+           "axis_y": 0.6875
+          },
+          "size_spec": {
+           "width": 1.375,
+           "height": 1.375
+          },
+          "render_spec": {
+           "opacity": 1
+          }
+         },
+         "layer_config": {
+          "tags": {
+           "PENDENT_LAYER": {
+            "config_type": 0
+           }
+          },
+          "is_critical": false,
+          "allow_over_paint": false,
+          "layer_mask": null
+         },
+         "resource": {
+          "res_type": 3,
+          "res_image": {
+           "image_src": {
+            "src_type": 1,
+            "placeholder": 0,
+            "remote": {
+             "url": "https://i2.hdslb.com/bfs/garb/open/dde9390d3815b129e46908194aa5cfebd8548d0f.png",
+             "bfs_style": "widget-layer-avatar"
+            }
+           }
+          }
+         }
+        }
+       ],
+       "group_mask": null,
+       "is_critical_group": true
+      },
+      "mid": "3493257977792627"
+     },
+     "face": "https://i2.hdslb.com/bfs/face/ce4efa67d2b01cec89af2dc644e946e2c562d3b6.jpg",
+     "face_nft": false,
+     "nft_info": null,
+     "name": "Liyuu工作室",
+     "name_render": null,
+     "label": "",
+     "mid": 3493257977792627,
+     "jump_url": "//space.bilibili.com/3493257977792627",
+     "following": null,
+     "pub_ts": "1784455180",
+     "pub_time": "2026年07月19日 17:59",
+     "pub_action": "",
+     "pub_location_text": "",
+     "is_top": false,
+     "icon_badge": null,
+     "views_text": "",
+     "official": {
+      "role": 0,
+      "title": "",
+      "desc": "",
+      "type": -1
+     },
+     "more": {
+      "rcmd_text": "",
+      "three_point_items": [
+       {
+        "label": "举报",
+        "type": "THREE_POINT_REPORT",
+        "params": {},
+        "modal": null,
+        "jump_url": ""
+       }
+      ]
+     },
+     "decorate_card": {
+      "id": "67967",
+      "item_id": "67967",
+      "name": "Liyuu收藏集",
+      "card_url": "https://i0.hdslb.com/bfs/garb/open/a1e0d9e0eae0f1fd4274a8ec95bf25b9607ac162",
+      "big_card_url": "https://i0.hdslb.com/bfs/garb/open/a1e0d9e0eae0f1fd4274a8ec95bf25b9607ac162",
+      "card_type": "2",
+      "expire_time": "0",
+      "card_type_name": "免费",
+      "jump_url": "https://www.bilibili.com/h5/mall/digital-card/home?act_id=101687&lottery_id=0&hybrid_set_header=2&anchor_task=1&navhide=1&f_source=garb&from=post&window_params=%7B%22type%22%3A2%2C%22mid%22%3A3493257977792627%7D",
+      "fan": {
+       "is_fan": "1",
+       "number": "604",
+       "color": "#BFC8D2",
+       "name": "XXXX",
+       "num_desc": "000604",
+       "num_prefix": "",
+       "color_format": {
+        "start_point": "0,0",
+        "end_point": "100,100",
+        "colors": [
+         "#B8C7D0FF",
+         "#A2A7B0FF"
+        ],
+        "gradients": [
+         "0",
+         "100"
+        ]
+       }
+      },
+      "image_enhance": "https://i0.hdslb.com/bfs/garb/open/a1e0d9e0eae0f1fd4274a8ec95bf25b9607ac162",
+      "image_group": null
+     }
+    },
+    "module_collection": null,
+    "module_dispute": null,
+    "module_topic": null,
+    "module_content": null,
+    "module_reprint_source": null,
+    "module_blocked": null,
+    "module_extend": null,
+    "module_copyright": null,
+    "module_bottom": null,
+    "module_stat": null,
+    "module_item_null": null,
+    "module_paywall": null,
+    "module_tribee": null
+   },
+   {
+    "module_type": "MODULE_TYPE_CONTENT",
+    "module_top": null,
+    "module_title": null,
+    "module_author": null,
+    "module_collection": null,
+    "module_dispute": null,
+    "module_topic": null,
+    "module_content": {
+     "paragraphs": [
+      {
+       "para_type": 1,
+       "align": 0,
+       "format": {
+        "align": 0,
+        "indent": null
+       },
+       "text": {
+        "nodes": [
+         {
+          "type": "TEXT_NODE_TYPE_WORD",
+          "word": {
+           "words": "✨2026 Liyuu「余夏微甜」成都见面会✨ \n\n时间：8月22日（周六） \n        下午场13:30｜夜晚场18:30\n\n地点：成都·未来影像创新中心（1号门）\n        四川省成都市武侯区西部智谷C区 \n\n开票时间：7月24日（周五） 12:00\n开票平台：bilibilli会员购\n票档信息：普通票380元 ｜ VIP票680元 \n票务链接及活动详情将在下周公布，8月22日和Liyuu一起抓住夏天的尾巴！ ",
+           "font_size": 17,
+           "color": "",
+           "dark_color": "",
+           "style": {
+            "bold": false,
+            "italic": false,
+            "strikethrough": false,
+            "underline": false,
+            "background": ""
+           },
+           "font_level": "regular",
+           "translated_words": "",
+           "bili_theme": "",
+           "bg_style": null
+          },
+          "rich": null,
+          "formula": null,
+          "user": null
+         },
+         {
+          "type": "TEXT_NODE_TYPE_RICH",
+          "word": null,
+          "rich": {
+           "text": "[liyuu动态表情_沉醉]",
+           "orig_text": "[liyuu动态表情_沉醉]",
+           "type": "RICH_TEXT_NODE_TYPE_EMOJI",
+           "jump_url": "",
+           "icon_url": "",
+           "icon_name": "",
+           "rid": "",
+           "emoji": {
+            "type": "3",
+            "size": 2,
+            "text": "[liyuu动态表情_沉醉]",
+            "icon_url": "https://i0.hdslb.com/bfs/garb/002ff441c4d1cfacbfda25a8c94ca3e3dc8e5bb2.png",
+            "gif_url": "https://i0.hdslb.com/bfs/garb/0124bd1e89fca8288ae6246699855cf3513d53c4.gif",
+            "webp_url": "https://i0.hdslb.com/bfs/garb/b115dc9ad38a16475d27ae1e79b112623df66ecd.webp",
+            "jump_url": "",
+            "jump_title": "",
+            "package_id": "8122",
+            "id": "111395"
+           },
+           "goods": null,
+           "style": null,
+           "pics": [],
+           "video": null
+          },
+          "formula": null,
+          "user": null
+         }
+        ]
+       },
+       "pic": null,
+       "line": null,
+       "list": null,
+       "link_card": null,
+       "code": null,
+       "heading": null,
+       "blockquote": null
+      },
+      {
+       "para_type": 2,
+       "align": 0,
+       "format": {
+        "align": 0,
+        "indent": null
+       },
+       "text": null,
+       "pic": {
+        "pics": [
+         {
+          "url": "http://i0.hdslb.com/bfs/new_dyn/beda7e56eece45e7e78820eee58e75083493257977792627.png",
+          "width": 1500,
+          "height": 2180,
+          "size": 4926.640625,
+          "live_url": "",
+          "aigc": 0,
+          "warning": null,
+          "comment": ""
+         }
+        ],
+        "style": 1
+       },
+       "line": null,
+       "list": null,
+       "link_card": null,
+       "code": null,
+       "heading": null,
+       "blockquote": null
+      }
+     ]
+    },
+    "module_reprint_source": null,
+    "module_blocked": null,
+    "module_extend": null,
+    "module_copyright": null,
+    "module_bottom": null,
+    "module_stat": null,
+    "module_item_null": null,
+    "module_paywall": null,
+    "module_tribee": null
+   },
+   {
+    "module_type": "MODULE_TYPE_STAT",
+    "module_top": null,
+    "module_title": null,
+    "module_author": null,
+    "module_collection": null,
+    "module_dispute": null,
+    "module_topic": null,
+    "module_content": null,
+    "module_reprint_source": null,
+    "module_blocked": null,
+    "module_extend": null,
+    "module_copyright": null,
+    "module_bottom": null,
+    "module_stat": {
+     "forward": {
+      "status": false,
+      "count": 29,
+      "forbidden": false,
+      "disabled": false,
+      "silent": false,
+      "hidden": false
+     },
+     "comment": {
+      "status": false,
+      "count": 44,
+      "forbidden": false,
+      "disabled": false,
+      "silent": false,
+      "hidden": false
+     },
+     "like": {
+      "status": false,
+      "count": 366,
+      "forbidden": false,
+      "disabled": false,
+      "silent": false,
+      "hidden": false
+     },
+     "coin": {
+      "status": false,
+      "count": 0,
+      "forbidden": false,
+      "disabled": false,
+      "silent": false,
+      "hidden": true
+     },
+     "favorite": {
+      "status": false,
+      "count": 14,
+      "forbidden": false,
+      "disabled": false,
+      "silent": false,
+      "hidden": false
+     }
+    },
+    "module_item_null": null,
+    "module_paywall": null,
+    "module_tribee": null
+   }
+  ],
+  "type": 0
+ }
+}

@@ -99,13 +99,18 @@ class _OpusPageState extends State<OpusPage> {
       future: _futureBuilderFuture,
       builder: (BuildContext context, AsyncSnapshot snapshot) {
         if (snapshot.connectionState == ConnectionState.done) {
+          if (snapshot.hasError) {
+            return _buildError('${snapshot.error}');
+          }
           if (snapshot.data == null) {
-            return const SizedBox();
+            return _buildError('没有取到内容');
           }
           if (snapshot.data['status']) {
             return _buildContent(controller.opusData.value);
           } else {
-            return _buildError(snapshot.data['message']);
+            return _buildError(snapshot.data['msg'] ??
+                snapshot.data['message'] ??
+                '加载失败');
           }
         } else {
           return _buildLoading();
@@ -115,21 +120,22 @@ class _OpusPageState extends State<OpusPage> {
   }
 
   Widget _buildContent(OpusDataModel opusData) {
-    if (opusData.detail == null) {
-      return const SizedBox();
+    final List<OpusModuleDataModel>? modules = opusData.detail?.modules;
+    if (opusData.detail == null || modules == null || modules.isEmpty) {
+      return _buildError('这条内容没有可显示的正文');
     }
-    final modules = opusData.detail!.modules!;
-    late ModuleContent moduleContent;
+    ModuleContent? moduleContent;
     // 获取所有的图片链接
     final List<String> picList = [];
     final int moduleIndex =
         modules.indexWhere((module) => module.moduleContent != null);
     if (moduleIndex != -1) {
-      moduleContent = modules[moduleIndex].moduleContent!;
-      for (var paragraph in moduleContent.paragraphs!) {
+      moduleContent = modules[moduleIndex].moduleContent;
+      for (var paragraph in moduleContent?.paragraphs ?? <ModuleParagraph>[]) {
         if (paragraph.paraType == 2) {
-          for (var pic in paragraph.pic!.pics!) {
-            picList.add(pic.url!);
+          for (var pic in paragraph.pic?.pics ?? <Pic>[]) {
+            final String? url = pic.url;
+            if (url != null && url.isNotEmpty) picList.add(url);
           }
         }
       }
@@ -152,7 +158,7 @@ class _OpusPageState extends State<OpusPage> {
             padding: const EdgeInsets.only(bottom: 20),
             child: _buildAuthorWidget(opusData),
           ),
-          ...moduleContent.paragraphs!.map(
+          ...(moduleContent?.paragraphs ?? <ModuleParagraph>[]).map(
             (ModuleParagraph paragraph) {
               return Column(
                 children: [
@@ -172,29 +178,35 @@ class _OpusPageState extends State<OpusPage> {
                     )
                   ] else if (paragraph.paraType == 2) ...[
                     ...paragraph.pic?.pics?.map(
-                          (Pic pic) => Center(
-                            child: Padding(
-                              padding:
-                                  const EdgeInsets.only(top: 10, bottom: 10),
-                              child: InkWell(
-                                onTap: () {
-                                  controller.onPreviewImg(
-                                    picList,
-                                    picList.indexOf(pic.url!),
-                                    context,
-                                  );
-                                },
-                                child: NetworkImgLayer(
-                                  src: pic.url,
-                                  width: (Get.size.width - 32) * pic.scale!,
-                                  height: (Get.size.width - 32) *
-                                      pic.scale! /
-                                      pic.aspectRatio!,
-                                  type: 'emote',
+                          (Pic pic) {
+                            // scale/aspectRatio 缺失时不能直接相除，NaN 会让整页布局崩掉
+                            final double boxWidth = Get.size.width - 32;
+                            final double scale =
+                                (pic.scale ?? 0) > 0 ? pic.scale! : 1.0;
+                            final double ratio =
+                                (pic.aspectRatio ?? 0) > 0 ? pic.aspectRatio! : 0.75;
+                            return Center(
+                              child: Padding(
+                                padding:
+                                    const EdgeInsets.only(top: 10, bottom: 10),
+                                child: InkWell(
+                                  onTap: () {
+                                    controller.onPreviewImg(
+                                      picList,
+                                      picList.indexOf(pic.url ?? ''),
+                                      context,
+                                    );
+                                  },
+                                  child: NetworkImgLayer(
+                                    src: pic.url,
+                                    width: boxWidth * scale,
+                                    height: boxWidth * scale / ratio,
+                                    type: 'emote',
+                                  ),
                                 ),
                               ),
-                            ),
-                          ),
+                            );
+                          },
                         ) ??
                         [],
                   ] else
@@ -209,15 +221,16 @@ class _OpusPageState extends State<OpusPage> {
   }
 
   Widget _buildAuthorWidget(OpusDataModel opusData) {
-    final modules = opusData.detail!.modules!;
-    late ModuleAuthor moduleAuthor;
-    final int moduleIndex =
-        modules.indexWhere((module) => module.moduleAuthor != null);
-    if (moduleIndex != -1) {
-      moduleAuthor = modules[moduleIndex].moduleAuthor!;
-    } else {
+    final List<OpusModuleDataModel>? modules = opusData.detail?.modules;
+    if (modules == null || modules.isEmpty) {
       return const SizedBox();
     }
+    final int moduleIndex =
+        modules.indexWhere((module) => module.moduleAuthor != null);
+    if (moduleIndex == -1) {
+      return const SizedBox();
+    }
+    final ModuleAuthor moduleAuthor = modules[moduleIndex].moduleAuthor!;
     return Row(
       children: [
         NetworkImgLayer(
@@ -231,12 +244,12 @@ class _OpusPageState extends State<OpusPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              moduleAuthor.name!,
+              moduleAuthor.name ?? '',
               style: const TextStyle(
                 fontWeight: FontWeight.w500,
               ),
             ),
-            StyledText(moduleAuthor.pubTime!),
+            StyledText(moduleAuthor.pubTime ?? ''),
           ],
         ),
       ],
@@ -244,24 +257,46 @@ class _OpusPageState extends State<OpusPage> {
   }
 
   Widget _buildStatsWidget(OpusDataModel opusData) {
-    final modules = opusData.detail!.modules!;
-    final ModuleStat moduleStat = modules.last.moduleStat!;
-    return Row(
-      children: [
-        StyledText('${moduleStat.comment!.count}评论'),
-        const SizedBox(width: 10),
-        StyledText('${moduleStat.like!.count}赞'),
-        const SizedBox(width: 10),
-        StyledText('${moduleStat.favorite!.count}转发'),
-      ],
-    );
+    final List<OpusModuleDataModel>? modules = opusData.detail?.modules;
+    if (modules == null || modules.isEmpty) {
+      return const SizedBox();
+    }
+    final int moduleIndex =
+        modules.lastIndexWhere((module) => module.moduleStat != null);
+    if (moduleIndex == -1) {
+      return const SizedBox();
+    }
+    final ModuleStat moduleStat = modules[moduleIndex].moduleStat!;
+    final List<Widget> parts = [];
+    void addPart(String text) {
+      if (parts.isNotEmpty) parts.add(const SizedBox(width: 10));
+      parts.add(StyledText(text));
+    }
+
+    if (moduleStat.comment?.count != null) {
+      addPart('${moduleStat.comment!.count}评论');
+    }
+    if (moduleStat.like?.count != null) {
+      addPart('${moduleStat.like!.count}赞');
+    }
+    if (moduleStat.favorite?.count != null) {
+      addPart('${moduleStat.favorite!.count}转发');
+    }
+    if (parts.isEmpty) {
+      return const SizedBox();
+    }
+    return Row(children: parts);
   }
 
-  Widget _buildError(String message) {
+  Widget _buildError(String? message) {
     return SizedBox(
       height: 100,
       child: Center(
-        child: Text(message),
+        child: Text(
+          message == null || message.isEmpty ? '加载失败' : message,
+          textAlign: TextAlign.center,
+          style: const TextStyle(fontSize: 13),
+        ),
       ),
     );
   }

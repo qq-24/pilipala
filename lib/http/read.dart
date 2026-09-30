@@ -20,10 +20,19 @@ class ReadHttp {
 
   // 解析专栏 opus格式
   static Future parseArticleOpus({required String id}) async {
+    try {
+      return await _parseArticleOpus(id);
+    } catch (err) {
+      return {'status': false, 'data': [], 'msg': '抓取失败: $err'};
+    }
+  }
+
+  static Future _parseArticleOpus(String id) async {
     var res = await Request().get('https://www.bilibili.com/opus/$id', extra: {
       'ua': 'pc',
     });
-    String? headContent = parse(res.data).head?.outerHtml;
+    final String html = res.data is String ? res.data as String : '';
+    String? headContent = parse(html).head?.outerHtml;
     var document = parse(headContent);
     var linkTags = document.getElementsByTagName('link');
     bool isCv = false;
@@ -46,13 +55,36 @@ class ReadHttp {
         break;
       }
     }
-    String scriptContent =
-        extractScriptContents(parse(res.data).body!.outerHtml)[0];
+    final List<String> scriptContents =
+        extractScriptContents(parse(html).body?.outerHtml ?? '');
+    // 被风控挡下来时拿到的是验证码壳页，正文里根本没有承载数据的 script 标签，
+    // 旧代码在这里 [0] 取值会抛 RangeError，页面就只剩一个标题
+    if (scriptContents.isEmpty) {
+      return {
+        'status': false,
+        'data': [],
+        'msg': (html.contains('验证码') || html.contains('_riskdata_'))
+            ? '被B站风控拦了（返回验证码页），稍后再试或查看原网页'
+            : '页面结构变了，没找到正文数据',
+      };
+    }
+    final String scriptContent = scriptContents.first;
     int startIndex = scriptContent.indexOf('{');
     int endIndex = scriptContent.lastIndexOf('};');
-    String jsonContent = scriptContent.substring(startIndex, endIndex + 1);
-    // 解析JSON字符串为Map
-    Map<String, dynamic> jsonData = json.decode(jsonContent);
+    if (startIndex < 0 || endIndex <= startIndex) {
+      return {'status': false, 'data': [], 'msg': '没找到正文数据块'};
+    }
+    Map<String, dynamic> jsonData;
+    try {
+      jsonData = json
+          .decode(scriptContent.substring(startIndex, endIndex + 1))
+          as Map<String, dynamic>;
+    } catch (err) {
+      return {'status': false, 'data': [], 'msg': '正文数据解析失败: $err'};
+    }
+    if (jsonData['detail'] == null) {
+      return {'status': false, 'data': [], 'msg': '这条内容没有详情数据'};
+    }
     return {
       'status': true,
       'data': OpusDataModel.fromJson(jsonData),
