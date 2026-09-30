@@ -17,6 +17,7 @@ import 'package:pilipala/utils/feed_back.dart';
 import 'package:pilipala/utils/id_utils.dart';
 
 import '../../../models/video/reply/item.dart';
+import '../widgets/action_panel.dart';
 import '../widgets/dynamic_panel.dart';
 
 class DynamicDetailPage extends StatefulWidget {
@@ -42,6 +43,7 @@ class _DynamicDetailPageState extends State<DynamicDetailPage>
   int oid = 0;
   int? opusId;
   bool isOpusId = false;
+  final GlobalKey _dynamicCardKey = GlobalKey();
 
   @override
   void initState() {
@@ -182,6 +184,18 @@ class _DynamicDetailPageState extends State<DynamicDetailPage>
     super.dispose();
   }
 
+  // 操作栏里的"评论"在详情页不该再压一层详情页，改成滚到评论区。
+  // 动态卡片是第一个 sliver，它的高度就是评论区在内容坐标系里的起点。
+  void _scrollToComments() {
+    final RenderBox? box = _dynamicCardKey.currentContext?.findRenderObject()
+        as RenderBox?;
+    if (box == null || !scrollController.hasClients) return;
+    final double target = (box.size.height - 80).clamp(
+        0.0, scrollController.position.maxScrollExtent);
+    scrollController.animateTo(target,
+        duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -209,9 +223,20 @@ class _DynamicDetailPageState extends State<DynamicDetailPage>
           slivers: [
             if (action != 'comment')
               SliverToBoxAdapter(
-                child: DynamicPanel(
-                  item: _dynamicDetailController.item,
-                  source: 'detail',
+                key: _dynamicCardKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    DynamicPanel(
+                      item: _dynamicDetailController.item,
+                      source: 'detail',
+                    ),
+                    // 操作栏原本只在动态列表卡片里出现，详情页一直没有点赞入口
+                    ActionPanel(
+                      item: _dynamicDetailController.item,
+                      onComment: _scrollToComments,
+                    ),
+                  ],
                 ),
               ),
             SliverPersistentHeader(

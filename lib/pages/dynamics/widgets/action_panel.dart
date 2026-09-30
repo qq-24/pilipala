@@ -14,9 +14,13 @@ class ActionPanel extends StatefulWidget {
   const ActionPanel({
     super.key,
     required this.item,
+    this.onComment,
   });
 
   final DynamicItemModel item;
+
+  /// 详情页里"评论"不该再压一层详情页，传了这个回调就改成滚动到评论区
+  final VoidCallback? onComment;
 
   @override
   State<ActionPanel> createState() => _ActionPanelState();
@@ -25,7 +29,7 @@ class ActionPanel extends StatefulWidget {
 class _ActionPanelState extends State<ActionPanel>
     with TickerProviderStateMixin {
   final DynamicsController _dynamicsController = Get.put(DynamicsController());
-  late ModuleStatModel stat;
+  ModuleStatModel? stat;
   bool isProcessing = false;
   double defaultHeight = 260;
   RxDouble height = 0.0.obs;
@@ -45,7 +49,7 @@ class _ActionPanelState extends State<ActionPanel>
   @override
   void initState() {
     super.initState();
-    stat = widget.item.modules!.moduleStat!;
+    stat = widget.item.modules?.moduleStat;
     onInit();
   }
 
@@ -57,25 +61,26 @@ class _ActionPanelState extends State<ActionPanel>
   Future onLikeDynamic() async {
     feedBack();
     var item = widget.item;
-    String dynamicId = item.idStr!;
+    String? dynamicId = item.idStr;
     // 1 已点赞 2 不喜欢 0 未操作
-    Like like = item.modules!.moduleStat!.like!;
-    int count = like.count == '点赞' ? 0 : int.parse(like.count ?? '0');
+    Like? like = item.modules?.moduleStat?.like;
+    if (dynamicId == null || like == null || like.status == null) {
+      SmartDialog.showToast('这条动态暂时不能点赞');
+      return;
+    }
+    // count 有时是"点赞"这种文案而不是数字
+    int count = int.tryParse(like.count ?? '') ?? 0;
     bool status = like.status!;
     int up = status ? 2 : 1;
     var res = await DynamicsHttp.likeDynamic(dynamicId: dynamicId, up: up);
     if (res['status']) {
       SmartDialog.showToast(!status ? '点赞成功' : '取消赞');
       if (up == 1) {
-        item.modules!.moduleStat!.like!.count = (count + 1).toString();
-        item.modules!.moduleStat!.like!.status = true;
+        like.count = (count + 1).toString();
+        like.status = true;
       } else {
-        if (count == 1) {
-          item.modules!.moduleStat!.like!.count = '点赞';
-        } else {
-          item.modules!.moduleStat!.like!.count = (count - 1).toString();
-        }
-        item.modules!.moduleStat!.like!.status = false;
+        like.count = count == 1 ? '点赞' : (count - 1).toString();
+        like.status = false;
       }
       setState(() {});
     } else {
@@ -86,11 +91,11 @@ class _ActionPanelState extends State<ActionPanel>
   // 动态转发
   void forwardHandler() async {
     final userInfo = _dynamicsController.userInfo;
-    if (userInfo == null) {
+    if (userInfo?.mid == null) {
       SmartDialog.showToast('请先登录');
       return;
     }
-    int mid = userInfo.mid!;
+    int mid = userInfo!.mid!;
     showModalBottomSheet(
       context: context,
       enableDrag: true,
@@ -102,8 +107,8 @@ class _ActionPanelState extends State<ActionPanel>
           item: widget.item,
           mid: mid,
           cb: () => setState(() {
-            stat.forward!.count =
-                (int.parse(stat.forward!.count ?? '0') + 1).toString();
+            final int count = int.tryParse(stat?.forward?.count ?? '') ?? 0;
+            stat?.forward?.count = (count + 1).toString();
           }),
         );
       },
@@ -130,14 +135,16 @@ class _ActionPanelState extends State<ActionPanel>
               padding: const EdgeInsets.fromLTRB(15, 0, 15, 0),
               foregroundColor: Theme.of(context).colorScheme.outline,
             ),
-            label: Text(stat.forward!.count ?? '转发'),
+            label: Text(stat?.forward?.count ?? '转发'),
           ),
         ),
         Expanded(
           flex: 1,
           child: TextButton.icon(
-            onPressed: () => _dynamicsController.pushDetail(widget.item, 1,
-                action: 'comment'),
+            onPressed: () => widget.onComment != null
+                ? widget.onComment!()
+                : _dynamicsController.pushDetail(widget.item, 1,
+                    action: 'comment'),
             icon: const Icon(
               FontAwesomeIcons.comment,
               size: 16,
@@ -146,7 +153,7 @@ class _ActionPanelState extends State<ActionPanel>
               padding: const EdgeInsets.fromLTRB(15, 0, 15, 0),
               foregroundColor: Theme.of(context).colorScheme.outline,
             ),
-            label: Text(stat.comment!.count ?? '评论'),
+            label: Text(stat?.comment?.count ?? '评论'),
           ),
         ),
         Expanded(
@@ -154,11 +161,11 @@ class _ActionPanelState extends State<ActionPanel>
           child: TextButton.icon(
             onPressed: handleState(onLikeDynamic),
             icon: Icon(
-              stat.like!.status!
+              stat?.like?.status == true
                   ? FontAwesomeIcons.solidThumbsUp
                   : FontAwesomeIcons.thumbsUp,
               size: 16,
-              color: stat.like!.status! ? primary : color,
+              color: stat?.like?.status == true ? primary : color,
             ),
             style: TextButton.styleFrom(
               padding: const EdgeInsets.fromLTRB(15, 0, 15, 0),
@@ -170,10 +177,10 @@ class _ActionPanelState extends State<ActionPanel>
                 return ScaleTransition(scale: animation, child: child);
               },
               child: Text(
-                stat.like!.count ?? '点赞',
-                key: ValueKey<String>(stat.like!.count ?? '点赞'),
+                stat?.like?.count ?? '点赞',
+                key: ValueKey<String>(stat?.like?.count ?? '点赞'),
                 style: TextStyle(
-                  color: stat.like!.status! ? primary : color,
+                  color: stat?.like?.status == true ? primary : color,
                 ),
               ),
             ),

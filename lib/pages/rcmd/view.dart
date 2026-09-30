@@ -30,14 +30,49 @@ class _RcmdPageState extends State<RcmdPage>
   final RcmdController _rcmdController = Get.put(RcmdController());
   late Future _futureBuilderFuture;
 
+  // 补页轮数上限，防止推荐真的空了以后无限发请求
+  static const int _maxFillRounds = 4;
+  int _fillRounds = 0;
+
   @override
   bool get wantKeepAlive => true;
 
   @override
   void initState() {
     super.initState();
-    _futureBuilderFuture = _rcmdController.queryRcmdFeed('init');
+    _startLoad(_rcmdController.queryRcmdFeed('init'));
     _rcmdController.scrollController.addListener(_onScroll);
+  }
+
+  void _startLoad(Future future) {
+    _fillRounds = 0;
+    _futureBuilderFuture = future;
+    _futureBuilderFuture.then((_) {
+      if (mounted) _ensureFillViewport();
+    });
+  }
+
+  /// 控制器每轮只补到"凑够 6 条"就停，平板上一屏都填不满；而下一页只由
+  /// "滚到距底部 200px"触发，内容不溢出视口就永远滚不动，也就永远不加载。
+  void _ensureFillViewport() {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted || !_rcmdController.scrollController.hasClients) return;
+      final ScrollPosition position = _rcmdController.scrollController.position;
+      if (position.maxScrollExtent >= 200 || _fillRounds >= _maxFillRounds) {
+        _fillRounds = 0;
+        return;
+      }
+      _fillRounds++;
+      final int before = _rcmdController.videoList.length;
+      await _rcmdController.onLoad();
+      if (!mounted) return;
+      // 一批里全是重复/无新内容，就别再发了
+      if (_rcmdController.videoList.length == before) {
+        _fillRounds = 0;
+        return;
+      }
+      _ensureFillViewport();
+    });
   }
 
   void _onScroll() {
@@ -83,6 +118,8 @@ class _RcmdPageState extends State<RcmdPage>
         onRefresh: () async {
           await _rcmdController.onRefresh();
           await Future.delayed(const Duration(milliseconds: 300));
+          _fillRounds = 0;
+          _ensureFillViewport();
         },
         child: CustomScrollView(
           controller: _rcmdController.scrollController,
@@ -115,8 +152,7 @@ class _RcmdPageState extends State<RcmdPage>
                         fn: () {
                           setState(() {
                             _rcmdController.isLoadingMore = true;
-                            _futureBuilderFuture =
-                                _rcmdController.queryRcmdFeed('init');
+                            _startLoad(_rcmdController.queryRcmdFeed('init'));
                           });
                         },
                       );
