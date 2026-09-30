@@ -123,11 +123,13 @@ class VideoDetailController extends GetxController
   RxDouble sheetHeight = 0.0.obs;
   double get effectiveSheetHeight {
     final ctx = Get.context;
-    if (ctx != null && MediaQuery.of(ctx).orientation == Orientation.landscape) {
+    if (ctx != null &&
+        MediaQuery.of(ctx).orientation == Orientation.landscape) {
       return Get.size.height * 0.7;
     }
     return sheetHeight.value > 100 ? sheetHeight.value : Get.size.height * 0.6;
   }
+
   RxString archiveSourceType = 'dash'.obs;
   ScrollController? replyScrollController;
   List<MediaVideoItemModel> mediaList = <MediaVideoItemModel>[];
@@ -138,11 +140,16 @@ class VideoDetailController extends GetxController
   int? lastPosition;
   // 默认屏幕方向
   RxString videoDirection = 'horizontal'.obs;
+  Map<String, String>? recommendationContext;
 
   @override
   void onInit() {
     super.onInit();
     final Map argMap = Get.arguments;
+    if (argMap['recommendationContext'] is Map) {
+      recommendationContext =
+          Map<String, String>.from(argMap['recommendationContext']);
+    }
     userInfo = userInfoCache.get('userInfoCache');
     if (argMap.containsKey('videoItem')) {
       var args = argMap['videoItem'];
@@ -296,7 +303,9 @@ class VideoDetailController extends GetxController
     duration,
     bool? autoplay,
   }) async {
-    print('[PLAY] playerInit called, archiveSourceType: ${archiveSourceType.value}');
+    print(
+        '[PLAY] playerInit called, archiveSourceType: ${archiveSourceType.value}');
+
     /// 设置/恢复 屏幕亮度
     if (brightness != null) {
       ScreenBrightness().setScreenBrightness(brightness!);
@@ -311,7 +320,9 @@ class VideoDetailController extends GetxController
     String effectiveAudioSource = audio ?? audioUrl;
 
     // DASH MPD 暂时禁用（调试中），使用 audio-files 方式
-    if (false && archiveSourceType.value == 'dash' && effectiveAudioSource.isNotEmpty) {
+    if (false &&
+        archiveSourceType.value == 'dash' &&
+        effectiveAudioSource.isNotEmpty) {
       try {
         print('[PLAY] generating MPD...');
         effectiveVideoSource = await generateDashMpd(
@@ -338,7 +349,8 @@ class VideoDetailController extends GetxController
       }
     }
 
-    print('[PLAY] setDataSource: video=${effectiveVideoSource.substring(0, effectiveVideoSource.length < 80 ? effectiveVideoSource.length : 80)}... audio=${effectiveAudioSource.isEmpty ? "EMPTY" : effectiveAudioSource.substring(0, effectiveAudioSource.length < 60 ? effectiveAudioSource.length : 60)}...');
+    print(
+        '[PLAY] setDataSource: video=${effectiveVideoSource.substring(0, effectiveVideoSource.length < 80 ? effectiveVideoSource.length : 80)}... audio=${effectiveAudioSource.isEmpty ? "EMPTY" : effectiveAudioSource.substring(0, effectiveAudioSource.length < 60 ? effectiveAudioSource.length : 60)}...');
     await plPlayerController.setDataSource(
       DataSource(
         videoSource: effectiveVideoSource,
@@ -359,6 +371,8 @@ class VideoDetailController extends GetxController
       bvid: bvid,
       cid: cid.value,
       enableHeart: enableHeart,
+      recommendationContext:
+          recommendationContext?['bvid'] == bvid ? recommendationContext : null,
       isFirstTime: isFirstTime,
       autoplay: autoplay ?? autoPlay.value,
     );
@@ -499,8 +513,10 @@ class VideoDetailController extends GetxController
       audioUrl = enableCDN
           ? VideoUtils.getCdnUrl(firstAudio)
           : (firstAudio.backupUrl ?? firstAudio.baseUrl!);
-      print('[PLAY] videoUrl: ${videoUrl.substring(0, videoUrl.length < 80 ? videoUrl.length : 80)}...');
-      print('[PLAY] audioUrl: ${audioUrl.substring(0, audioUrl.length < 80 ? audioUrl.length : 80)}...');
+      print(
+          '[PLAY] videoUrl: ${videoUrl.substring(0, videoUrl.length < 80 ? videoUrl.length : 80)}...');
+      print(
+          '[PLAY] audioUrl: ${audioUrl.substring(0, audioUrl.length < 80 ? audioUrl.length : 80)}...');
       //
       if (firstAudio.id != null) {
         currentAudioQa = AudioQualityCode.fromCode(firstAudio.id!)!;

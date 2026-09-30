@@ -156,7 +156,7 @@ class Request {
         var result = await Request().get(
           "${HttpString.apiBaseUrl}/x/frontend/finger/spi",
         );
-        buvid = result["data"]["b_3"].toString();
+        buvid = result.data["data"]["b_3"].toString();
       } catch (e) {
         // 处理请求错误
         buvid = '';

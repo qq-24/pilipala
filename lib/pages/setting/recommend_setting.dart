@@ -98,7 +98,7 @@ class _RecommendSettingState extends State<RecommendSetting> {
                       title: const Text('切换到app端推荐'),
                       content: Text(needKey
                           ? '使用app端推荐需获取access_key，有小概率触发风控导致账号退出（在官方版本app重新登录即可解除），是否继续？'
-                          : '当前access_key有效，切换后立即生效，推荐将变为app端个性化内容，是否继续？'),
+                          : '已有当前账号的access_key，切换后立即生效。可通过诊断核验服务器登录状态，是否继续？'),
                       actions: [
                         TextButton(
                           onPressed: () => Navigator.of(context).pop(false),
@@ -115,8 +115,8 @@ class _RecommendSettingState extends State<RecommendSetting> {
                 if (go != true) return;
                 if (needKey) {
                   await MemberHttp.cookieToKey();
-                  accessKeyInfo =
-                      localCache.get(LocalCacheKey.accessKey, defaultValue: null);
+                  accessKeyInfo = localCache.get(LocalCacheKey.accessKey,
+                      defaultValue: null);
                 }
               }
               defaultRcmdType = result;
@@ -156,7 +156,7 @@ class _RecommendSettingState extends State<RecommendSetting> {
             dense: false,
             title: Text('诊断app端推荐', style: titleStyle),
             subtitle: Text(
-              '对比明文/签名/游客三种请求，定位推荐失效根因。建议先在「隐私设置」刷新access_key后马上诊断',
+              '验证服务器识别的 token 归属、推荐原始数量与重复情况',
               style: subTitleStyle,
             ),
             onTap: () async {
@@ -174,35 +174,8 @@ class _RecommendSettingState extends State<RecommendSetting> {
               if (!res['status']) {
                 head = res['msg'];
               } else {
-                final double ov = res['overlap'];
-                final bool guestOk = res['guestOk'];
-                final bool midMatch = userInfo != null &&
-                    accessKeyInfo != null &&
-                    '${accessKeyInfo['mid']}' == '${userInfo!.mid}';
-                final String verdict;
-                if (!guestOk) {
-                  verdict =
-                      '真游客基准仍失败（${res['guestErr']}），无法自动对比。'
-                      '请直接目测下方「当前推荐」标题是否与你兴趣相关。';
-                } else if (ov >= 0.9) {
-                  verdict =
-                      '当前推荐与真游客结果几乎一致（${(ov * 100).toStringAsFixed(0)}%重合）'
-                      '→ 登录态未生效，看到的是分发给所有人的通用内容';
-                } else if (ov >= 0.5) {
-                  verdict =
-                      '重合率偏高（${(ov * 100).toStringAsFixed(0)}%）'
-                      '→ 部分生效或热度内容占比大，建议结合标题判断';
-                } else {
-                  verdict =
-                      '与真游客结果差异显著（重合仅${(ov * 100).toStringAsFixed(0)}%）'
-                      '→ app端推荐携带的登录态正在生效，内容是你的个性化流';
-                }
-                head = 'token归属与当前账号一致：'
-                    '${midMatch ? '是' : '否（换过号，建议刷新token后重测）'}\n'
-                    '签名请求重合率：${res['signedCode'] == 0 ? '${(res['signedOverlap'] * 100).toStringAsFixed(0)}%' : '失败(code=${res['signedCode']})'}\n\n'
-                    '$verdict';
-                liveTitles = res['liveTitles'].cast<String>();
-                guestTitles = res['guestTitles'].cast<String>();
+                head = res['msg'];
+                liveTitles = (res['liveTitles'] as List? ?? []).cast<String>();
               }
               if (context.mounted) {
                 showDialog(
@@ -216,29 +189,24 @@ class _RecommendSettingState extends State<RecommendSetting> {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Text(head,
-                                style:
-                                    Theme.of(context).textTheme.labelLarge),
+                                style: Theme.of(context).textTheme.labelLarge),
                             if (liveTitles.isNotEmpty) ...[
                               const SizedBox(height: 10),
                               Text('■ 当前app端推荐（登录态）：',
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .titleSmall),
+                                  style:
+                                      Theme.of(context).textTheme.titleSmall),
                               ...liveTitles.map((e) => Text('  $e',
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .bodySmall)),
+                                  style:
+                                      Theme.of(context).textTheme.bodySmall)),
                             ],
                             if (guestTitles.isNotEmpty) ...[
                               const SizedBox(height: 10),
                               Text('■ 真游客（无任何登录信息）：',
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .titleSmall),
+                                  style:
+                                      Theme.of(context).textTheme.titleSmall),
                               ...guestTitles.map((e) => Text('  $e',
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .bodySmall)),
+                                  style:
+                                      Theme.of(context).textTheme.bodySmall)),
                             ],
                           ],
                         ),
@@ -316,7 +284,7 @@ class _RecommendSettingState extends State<RecommendSetting> {
             subTitle: '推荐中已关注用户发布的内容不会被过滤',
             setKey: SettingBoxKey.exemptFilterForFollowed,
             defaultVal: true,
-            callFn: (_) => {RecommendFilter.update},
+            callFn: (_) => RecommendFilter.update(),
           ),
           // ListTile(
           //   dense: false,
@@ -351,7 +319,7 @@ class _RecommendSettingState extends State<RecommendSetting> {
             subTitle: '视频详情页的相关视频也进行过滤²',
             setKey: SettingBoxKey.applyFilterToRelatedVideos,
             defaultVal: true,
-            callFn: (_) => {RecommendFilter.update},
+            callFn: (_) => RecommendFilter.update(),
           ),
           ListTile(
             dense: true,

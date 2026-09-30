@@ -13,24 +13,40 @@ import '../../http/user.dart';
 import '../../http/video.dart';
 import '../../utils/id_utils.dart';
 import '../../utils/utils.dart';
+import '../../models/home/rcmd/result.dart';
+import '../../pages/rcmd/controller.dart';
+import '../../utils/app_scheme.dart';
+import '../../utils/diag_log.dart';
+import '../../utils/recommendation_feedback.dart';
+import '../../utils/recommendation_state.dart';
 import '../constants.dart';
 import 'badge.dart';
 import 'network_img_layer.dart';
+
+/// 动态卡片链接的解析结果：opus / read / dynamicDetail / scheme / none
+class PictureJump {
+  const PictureJump(this.route, {this.parameters = const {}, this.id = ''});
+  final String route;
+  final Map<String, String> parameters;
+  final String id;
+}
 
 // 视频卡片 - 垂直布局
 class VideoCardV extends StatelessWidget {
   final dynamic videoItem;
   final int crossAxisCount;
+  final int? recommendationPosition;
   final Function? blockUserCb;
 
   const VideoCardV({
     Key? key,
     required this.videoItem,
     required this.crossAxisCount,
+    this.recommendationPosition,
     this.blockUserCb,
   }) : super(key: key);
 
-  bool isStringNumeric(String str) {
+  static bool isStringNumeric(String str) {
     RegExp numericRegex = RegExp(r'^\d+$');
     return numericRegex.hasMatch(str);
   }
@@ -52,58 +68,124 @@ class VideoCardV extends StatelessWidget {
         break;
       case 'av':
         String bvid = videoItem.bvid ?? IdUtils.av2bv(videoItem.aid);
+        final appItem = videoItem is RecVideoItemAppModel
+            ? videoItem as RecVideoItemAppModel
+            : null;
+        if (appItem != null && recommendationPosition != null) {
+          RecommendationFeedback.instance.add(
+              appItem, 'tm.recommend.0.click', recommendationPosition!,
+              click: true);
+        }
         Get.toNamed('/video?bvid=$bvid&cid=${videoItem.cid}', arguments: {
           // 'videoItem': videoItem,
           'pic': videoItem.pic,
           'heroTag': heroTag,
+          if (appItem?.trackId != null && recommendationPosition != null)
+            'recommendationContext': {
+              'bvid': bvid,
+              'track_id': appItem!.trackId!,
+              'from_spmid': 'tm.recommend.0.0'
+            },
         });
         break;
       // 动态
       case 'picture':
         try {
-          String uri = videoItem.uri;
-          if (videoItem.uri.startsWith('bilibili://article/')) {
-            // https://www.bilibili.com/read/cv27063554
-            RegExp regex = RegExp(r'\d+');
-            Match match = regex.firstMatch(videoItem.uri)!;
-            String matchedNumber = match.group(0)!;
-            videoItem.param = int.parse(matchedNumber);
-          }
-          if (uri.startsWith('http')) {
-            String path = Uri.parse(uri).path;
-            if (isStringNumeric(path.split('/')[1])) {
-              // 请求接口
-              var res =
-                  await DynamicsHttp.dynamicDetail(id: path.split('/')[1]);
-              if (res['status']) {
-                Get.toNamed('/dynamicDetail', arguments: {
-                  'item': res['data'],
-                  'floor': 1,
-                  'action': 'detail'
-                });
-              }
-              return;
-            }
-          }
-          Get.toNamed('/read', parameters: {
-            'title': videoItem.title,
-            'id': videoItem.param,
-            'articleType': 'read'
-          });
+          await pushPictureDynamic();
         } catch (err) {
+          DiagLog.write('[PIC_JUMP-ERR] $err  card=${videoItem.uri}');
           SmartDialog.showToast(err.toString());
         }
         break;
       default:
-        SmartDialog.showToast(videoItem.goto);
+        SmartDialog.showToast('${videoItem.goto}');
         Get.toNamed(
           '/webview',
           parameters: {
-            'url': videoItem.uri,
+            'url': '${videoItem.uri ?? ''}',
             'type': 'url',
-            'pageTitle': videoItem.title,
+            'pageTitle': '${videoItem.title ?? ''}',
           },
         );
+    }
+  }
+
+  /// 把卡片链接解析成跳转目标。uri 有 bilibili://opus/detail/x、bilibili://article/x、
+  /// https://www.bilibili.com/opus/x、https://t.bilibili.com/x 等形态，而 param 是
+  /// int，Get.toNamed 的 parameters 只接受 Map<String, String>。
+  static PictureJump resolvePictureJump({
+    required String uri,
+    required String param,
+    String title = '',
+  }) {
+    if (uri.startsWith('//')) {
+      uri = 'https:$uri';
+    }
+    if (uri.isEmpty) {
+      return isStringNumeric(param)
+          ? PictureJump('opus',
+              parameters: {'title': title, 'id': param, 'articleType': 'opus'})
+          : const PictureJump('none');
+    }
+    final Uri parsed = Uri.parse(uri);
+    final List<String> segments =
+        parsed.pathSegments.where((String s) => s.isNotEmpty).toList();
+    // bilibili:// 的类型在 host 上，http(s):// 的类型在首个路径段上
+    final String kind = parsed.scheme == 'bilibili'
+        ? parsed.host
+        : (segments.isEmpty ? '' : segments.first);
+    final List<int> numbers =
+        Utils.matchNum(segments.isEmpty ? '' : segments.last);
+    final String id = numbers.isEmpty ? '' : '${numbers.first}';
+    if (id.isNotEmpty) {
+      if (kind == 'opus') {
+        return PictureJump('opus',
+            parameters: {'title': title, 'id': id, 'articleType': 'opus'});
+      }
+      if (kind == 'article' || kind == 'read') {
+        return PictureJump('read',
+            parameters: {'title': title, 'id': id, 'articleType': 'read'});
+      }
+    }
+    if (isStringNumeric(kind)) {
+      // https://t.bilibili.com/<动态id>
+      return PictureJump('dynamicDetail', id: kind);
+    }
+    return const PictureJump('scheme');
+  }
+
+  Future<void> pushPictureDynamic() async {
+    final String uri = '${videoItem.uri ?? ''}';
+    final PictureJump jump = resolvePictureJump(
+      uri: uri,
+      param: '${videoItem.param ?? ''}',
+      title: '${videoItem.title ?? ''}',
+    );
+    DiagLog.write('[PIC_JUMP] ${jump.route} id=${jump.id} uri=$uri');
+    switch (jump.route) {
+      case 'opus':
+        Get.toNamed('/opus', parameters: jump.parameters);
+        break;
+      case 'read':
+        Get.toNamed('/read', parameters: jump.parameters);
+        break;
+      case 'dynamicDetail':
+        final res = await DynamicsHttp.dynamicDetail(id: jump.id);
+        if (res['status'] == true) {
+          Get.toNamed('/dynamicDetail', arguments: {
+            'item': res['data'],
+            'floor': 1,
+            'action': 'detail',
+          });
+        } else {
+          SmartDialog.showToast('${res['msg']}');
+        }
+        break;
+      case 'none':
+        SmartDialog.showToast('动态链接为空');
+        break;
+      default:
+        PiliSchame.routePush(Uri.parse(uri));
     }
   }
 
@@ -329,6 +411,37 @@ class MorePanel extends StatelessWidget {
     }
   }
 
+  Future<void> showDislike(BuildContext context) async {
+    final item = videoItem as RecVideoItemAppModel;
+    Navigator.of(context).pop();
+    final root = Get.context;
+    if (root == null) return;
+    final reason = await showModalBottomSheet<int>(
+        context: root,
+        builder: (context) => SafeArea(
+                child: SingleChildScrollView(
+                    child: Column(mainAxisSize: MainAxisSize.min, children: [
+              const ListTile(title: Text('不感兴趣')),
+              for (final entry in item.dislikeReasons)
+                if ((feedInt(entry['id']) ?? 0) > 0)
+                  ListTile(
+                      title: Text('${entry['name'] ?? '这个内容'}'),
+                      onTap: () =>
+                          Navigator.of(context).pop(feedInt(entry['id']))),
+            ]))));
+    if (reason == null) return;
+    SmartDialog.showLoading(msg: '提交反馈…');
+    try {
+      final result = await VideoHttp.feedDislike(item, reason);
+      if (result['status'] == true && Get.isRegistered<RcmdController>()) {
+        Get.find<RcmdController>().removeFeedbackItem(item);
+      }
+      SmartDialog.showToast(result['msg']);
+    } finally {
+      SmartDialog.dismiss(status: SmartStatus.loading);
+    }
+  }
+
   void blockUser() async {
     SmartDialog.show(
       useSystem: true,
@@ -375,6 +488,14 @@ class MorePanel extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           const DragHandle(),
+          if (videoItem is RecVideoItemAppModel &&
+              (videoItem as RecVideoItemAppModel).dislikeReasons.isNotEmpty)
+            ListTile(
+                onTap: () => showDislike(context),
+                minLeadingWidth: 0,
+                leading: const Icon(Icons.not_interested, size: 19),
+                title: Text('不感兴趣',
+                    style: Theme.of(context).textTheme.titleSmall)),
           ListTile(
             onTap: () async => await menuActionHandler('block'),
             minLeadingWidth: 0,

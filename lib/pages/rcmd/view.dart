@@ -9,6 +9,12 @@ import 'package:pilipala/common/widgets/http_error.dart';
 import 'package:pilipala/common/widgets/video_card_v.dart';
 import 'package:pilipala/utils/adaptive.dart';
 import 'package:pilipala/utils/main_stream.dart';
+import 'package:pilipala/common/widgets/recommendation_visibility.dart';
+import 'package:pilipala/models/home/rcmd/result.dart';
+import 'package:pilipala/pages/home/controller.dart';
+import 'package:pilipala/pages/main/controller.dart';
+import 'package:pilipala/utils/recommendation_state.dart';
+import 'package:pilipala/utils/recommendation_feedback.dart';
 
 import 'controller.dart';
 
@@ -31,25 +37,35 @@ class _RcmdPageState extends State<RcmdPage>
   void initState() {
     super.initState();
     _futureBuilderFuture = _rcmdController.queryRcmdFeed('init');
-    ScrollController scrollController = _rcmdController.scrollController;
-    scrollController.addListener(
-      () {
-        if (scrollController.position.pixels >=
-            scrollController.position.maxScrollExtent - 200) {
-          EasyThrottle.throttle(
-              'my-throttler', const Duration(milliseconds: 200), () {
-            _rcmdController.isLoadingMore = true;
-            _rcmdController.onLoad();
-          });
-        }
-        handleScrollEvent(scrollController);
-      },
-    );
+    _rcmdController.scrollController.addListener(_onScroll);
+  }
+
+  void _onScroll() {
+    final scroll = _rcmdController.scrollController;
+    if (scroll.position.pixels >= scroll.position.maxScrollExtent - 200) {
+      EasyThrottle.throttle('recommendation-load',
+          const Duration(milliseconds: 500), _rcmdController.onLoad);
+    }
+    handleScrollEvent(scroll);
+  }
+
+  bool _isActive() {
+    if (!mounted || ModalRoute.of(context)?.isCurrent == false) return false;
+    if (Get.isRegistered<MainController>()) {
+      final main = Get.find<MainController>();
+      if (main.pagesIds[main.selectedIndex] != 0) return false;
+    }
+    if (Get.isRegistered<HomeController>()) {
+      final home = Get.find<HomeController>();
+      if (home.tabbarSort[home.tabController.index] != 'rcmd' ||
+          home.tabController.indexIsChanging) return false;
+    }
+    return true;
   }
 
   @override
   void dispose() {
-    _rcmdController.scrollController.removeListener(() {});
+    _rcmdController.scrollController.removeListener(_onScroll);
     super.dispose();
   }
 
@@ -126,7 +142,8 @@ class _RcmdPageState extends State<RcmdPage>
     // if (maxWidth < 300) {
     //   crossAxisCount = 1;
     // }
-    int crossAxisCount = responsiveCrossAxisCount(context, baseCount: ctr.crossAxisCount.value);
+    int crossAxisCount =
+        responsiveCrossAxisCount(context, baseCount: ctr.crossAxisCount.value);
     double mainAxisExtent = (Get.size.width /
             crossAxisCount /
             StyleString.aspectRatio) +
@@ -143,11 +160,34 @@ class _RcmdPageState extends State<RcmdPage>
       ),
       delegate: SliverChildBuilderDelegate(
         (BuildContext context, int index) {
+          if (videoList.isEmpty) return const VideoCardVSkeleton();
+          final item = videoList[index];
+          final mode = ctr.defaultRcmdType;
+          final scope = ctr.exposureScope as String;
           return videoList!.isNotEmpty
-              ? VideoCardV(
-                  videoItem: videoList[index],
-                  crossAxisCount: crossAxisCount,
-                  blockUserCb: (mid) => ctr.blockUserCb(mid),
+              ? RecommendationVisibility(
+                  key: ValueKey(
+                      'rcmd:${recommendationId(item) ?? item.hashCode}:${item is RecVideoItemAppModel ? item.trackId : ''}'),
+                  isActive: _isActive,
+                  onStart: (start) {
+                    ctr.exposed(item, scope: scope);
+                    if (item is RecVideoItemAppModel && mode == 'app') {
+                      RecommendationFeedback.instance
+                          .add(item, 'tm.recommend.feed-card.0.show', index);
+                    }
+                  },
+                  onEnd: (start, end) {
+                    if (item is RecVideoItemAppModel && mode == 'app') {
+                      RecommendationFeedback.instance.add(
+                          item, 'tm.recommend.feed-card.duration.show', index,
+                          start: start, end: end);
+                    }
+                  },
+                  child: VideoCardV(
+                      videoItem: item,
+                      crossAxisCount: crossAxisCount,
+                      recommendationPosition: index,
+                      blockUserCb: (mid) => ctr.blockUserCb(mid)),
                 )
               : const VideoCardVSkeleton();
         },

@@ -101,6 +101,7 @@ class PlPlayerController {
   int _cid = 0;
   int _heartDuration = 0;
   bool _enableHeart = true;
+  Map<String, String>? _recommendationContext;
   bool _isFirstTime = true;
 
   Timer? _timer;
@@ -335,13 +336,15 @@ class PlPlayerController {
     int cid = 0,
     // 历史记录开关
     bool enableHeart = true,
+    Map<String, String>? recommendationContext,
     // 是否首次加载
     bool isFirstTime = true,
     //  是否开启字幕
     bool enableSubTitle = false,
   }) async {
     try {
-      print('[PLAYER] setDataSource: ${dataSource.videoSource?.substring(0, (dataSource.videoSource?.length ?? 0) < 80 ? dataSource.videoSource?.length ?? 0 : 80)}');
+      print(
+          '[PLAYER] setDataSource: ${dataSource.videoSource?.substring(0, (dataSource.videoSource?.length ?? 0) < 80 ? dataSource.videoSource?.length ?? 0 : 80)}');
       _autoPlay = autoplay;
       _looping = looping;
       // 初始化视频倍速
@@ -353,6 +356,7 @@ class PlPlayerController {
       _bvid = bvid;
       _cid = cid;
       _enableHeart = enableHeart;
+      _recommendationContext = recommendationContext;
       _isFirstTime = isFirstTime;
       _subTitleOpen.value = enableSubTitle;
       subtitles = [].obs;
@@ -458,7 +462,8 @@ class PlPlayerController {
 
     // 音轨
     if (dataSource.audioSource != '' && dataSource.audioSource != null) {
-      print('[PLAYER] audio-files: ${dataSource.audioSource?.substring(0, (dataSource.audioSource?.length ?? 0) < 80 ? dataSource.audioSource?.length ?? 0 : 80)}');
+      print(
+          '[PLAYER] audio-files: ${dataSource.audioSource?.substring(0, (dataSource.audioSource?.length ?? 0) < 80 ? dataSource.audioSource?.length ?? 0 : 80)}');
       await pp.setProperty(
         'audio-files',
         UniversalPlatform.isWindows
@@ -506,7 +511,8 @@ class PlPlayerController {
         play: false,
       );
     }
-    print('[PLAYER] player.open: ${dataSource.videoSource?.substring(0, (dataSource.videoSource?.length ?? 0) < 80 ? dataSource.videoSource?.length ?? 0 : 80)}');
+    print(
+        '[PLAYER] player.open: ${dataSource.videoSource?.substring(0, (dataSource.videoSource?.length ?? 0) < 80 ? dataSource.videoSource?.length ?? 0 : 80)}');
     await player.open(
       Media(dataSource.videoSource!,
           httpHeaders: dataSource.httpHeaders, start: seekTo),
@@ -1032,6 +1038,7 @@ class PlPlayerController {
         cid: _cid,
         progress:
             playerStatus.status.value == PlayerStatus.completed ? -1 : progress,
+        recommendationContext: _recommendationContext,
       );
     } else
     // 正常播放时，间隔5秒更新一次
@@ -1041,6 +1048,7 @@ class PlPlayerController {
         bvid: _bvid,
         cid: _cid,
         progress: progress,
+        recommendationContext: _recommendationContext,
       );
     }
   }

@@ -1,4 +1,5 @@
 import 'package:pilipala/utils/id_utils.dart';
+import 'package:pilipala/utils/recommendation_state.dart';
 
 class RecVideoItemAppModel {
   RecVideoItemAppModel({
@@ -46,25 +47,50 @@ class RecVideoItemAppModel {
 
   String? cardType;
   Map? adInfo;
+  int? idx;
+  String? trackId;
+  String? feedAccount;
+  List<Map<String, dynamic>> dislikeReasons = [];
+  Map<String, dynamic> reportFields = {};
 
   RecVideoItemAppModel.fromJson(Map<String, dynamic> json) {
-    id = json['player_args'] != null
-        ? json['player_args']['aid']
-        : int.parse(json['param'] ?? '-1');
-    aid = json['player_args'] != null ? json['player_args']['aid'] : -1;
-    bvid = json['player_args'] != null
-        ? IdUtils.av2bv(json['player_args']['aid'])
-        : '';
-    cid = json['player_args'] != null ? json['player_args']['cid'] : -1;
+    goto = '${json['goto'] ?? json['card_goto'] ?? ''}';
+    param = feedInt(json['param']);
+    aid = goto == 'av'
+        ? feedInt(json['player_args']?['aid'] ?? json['args']?['aid']) ?? param
+        : null;
+    id = aid ?? param;
+    bvid = aid != null && aid! > 0 ? IdUtils.av2bv(aid!) : '';
+    cid = feedInt(json['player_args']?['cid']);
+    idx = feedInt(json['idx']);
+    trackId = json['track_id']?.toString();
+    final reasons = json['three_point']?['dislike_reasons'];
+    if (reasons is List) {
+      dislikeReasons = reasons
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList();
+    }
+    reportFields = {
+      'goto': '${json['card_goto'] ?? goto}',
+      'param': '${param ?? ''}',
+      'card_type': '${json['card_type'] ?? ''}',
+      'track_id': trackId ?? '',
+      'spmid': 'tm.recommend.0.0',
+      if (json['dislike_report_data'] != null)
+        'report_data': json['dislike_report_data']
+    };
     pic = json['cover'];
     stat = RcmdStat.fromJson(json);
     // 改用player_args中的duration作为原始数据（秒数）
-    duration =
-        json['player_args'] != null ? json['player_args']['duration'] : -1;
+    duration = feedInt(json['player_args']?['duration']) ?? -1;
     //duration = json['cover_right_text'];
     title = json['title'] ?? '获取标题失败';
     owner = RcmdOwner.fromJson(json);
-    rcmdReason = json['bottom_rcmd_reason'] ?? json['top_rcmd_reason'];
+    final reason = json['bottom_rcmd_reason'] ??
+        json['top_rcmd_reason'] ??
+        json['rcmd_reason_style']?['text'];
+    rcmdReason = reason is String ? reason : null;
     // 由于app端api并不会直接返回与owner的关注状态
     // 所以借用推荐原因是否为“已关注”、“新关注”等判别关注状态，从而与web端接口等效
     RegExp regex = RegExp(r'已关注|新关注');
@@ -73,8 +99,6 @@ class RecVideoItemAppModel {
     if (isFollowed == 1) {
       rcmdReason = null;
     }
-    goto = json['goto'];
-    param = int.parse(json['param'] ?? '-1');
     uri = json['uri'];
     talkBack = json['talk_back'];
 
@@ -117,7 +141,7 @@ class RcmdOwner {
         : json['desc_button'] != null
             ? json['desc_button']['text']
             : '';
-    mid = json['args']['up_id'] ?? -1;
+    mid = feedInt(json['args']?['up_id'] ?? json['args']?['up_mid']) ?? -1;
   }
 }
 

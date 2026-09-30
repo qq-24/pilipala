@@ -42,7 +42,8 @@ class ApiInterceptor extends Interceptor {
     // handler.next(err);
     String url = err.requestOptions.uri.toString();
     final excludedPatterns = RegExp(r'heartbeat|seg\.so|online/total');
-    if (!excludedPatterns.hasMatch(url)) {
+    if (err.type != DioExceptionType.cancel &&
+        !excludedPatterns.hasMatch(url)) {
       SmartDialog.showToast(
         await dioError(err),
         displayType: SmartToastType.onlyRefresh,

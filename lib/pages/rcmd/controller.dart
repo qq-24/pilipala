@@ -1,210 +1,247 @@
+import 'dart:async';
+import 'package:dio/dio.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:get/get.dart';
 import 'package:hive/hive.dart';
 import 'package:pilipala/http/member.dart';
 import 'package:pilipala/http/video.dart';
-import 'package:pilipala/models/home/rcmd/result.dart';
-import 'package:pilipala/models/model_rec_video_item.dart';
+import 'package:pilipala/utils/diag_log.dart';
+import 'package:pilipala/utils/recommendation_state.dart';
 import 'package:pilipala/utils/storage.dart';
 
+typedef RecommendationFetcher = Future<Map<String, dynamic>> Function(
+    String mode, int idx, bool pull, int flush, CancelToken token);
+
 class RcmdController extends GetxController {
-  final ScrollController scrollController = ScrollController();
-  int _currentPage = 0;
-  // RxList<RecVideoItemAppModel> appVideoList = <RecVideoItemAppModel>[].obs;
-  // RxList<RecVideoItemModel> webVideoList = <RecVideoItemModel>[].obs;
-  bool isLoadingMore = true;
+  final RecommendationFetcher? fetchOverride;
+  RcmdController({this.fetchOverride});
+  final scrollController = ScrollController();
+  final Box setting = GStorage.setting;
+  final crossAxisCount = 2.obs;
+  final RxList<dynamic> videoList = <dynamic>[].obs;
   OverlayEntry? popupDialog;
-  Box setting = GStorage.setting;
-  RxInt crossAxisCount = 2.obs;
-  late bool enableSaveLastData;
-  late String defaultRcmdType = 'web';
-  late RxList<dynamic> videoList;
-  // 本次会话已展示过的视频id（去重用，避免同一批反复出现）
-  final Set<String> _seenIds = {};
-  // 云端同步节流：超过7天未同步才跑一次
-  static const int _cookieSyncInterval = 7 * 24 * 3600 * 1000;
+  bool isLoadingMore = false;
+  bool _busy = false;
+  bool enableSaveLastData = false;
+  String defaultRcmdType = 'web';
+  int _webFresh = 0, _generation = 0;
+  final _cursor = AppFeedCursor();
+  CancelToken? _cancel;
+  Future<Map<String, dynamic>>? _pending;
+  Future<void>? _keyReady;
+  RecommendationSeen _seen = RecommendationSeen();
+  String _scope = '';
+  String get exposureScope => _scope;
+  Timer? _seenWrite;
+
+  String get _currentScope =>
+      '${defaultRcmdType == 'notLogin' ? 'guest' : GStorage.userInfo.get('userInfoCache')?.mid ?? 'guest'}:$defaultRcmdType';
 
   @override
   void onInit() {
     super.onInit();
     crossAxisCount.value =
         setting.get(SettingBoxKey.customRows, defaultValue: 2);
-    enableSaveLastData =
-        setting.get(SettingBoxKey.enableSaveLastData, defaultValue: false);
     defaultRcmdType =
         setting.get(SettingBoxKey.defaultRcmdType, defaultValue: 'web');
-    if (defaultRcmdType == 'web') {
-      videoList = <RecVideoItemModel>[].obs;
-    } else {
-      videoList = <RecVideoItemAppModel>[].obs;
-    }
-    // app端推荐：进入时自动检查并静默续期 access_key，防止token过期退化为游客内容
-    if (defaultRcmdType == 'app') {
-      _ensureFreshAccessKey();
-    }
+    _loadScope();
+    _keyReady = _prepareKey();
   }
 
-  /// token缺失/归属与当前账号不符/剩余有效期不足5天 → 静默换发新token
-  /// 登录态云端同步节流到7天一次：启动期只读缓存看时间戳，不发网
-  Future<void> _ensureFreshAccessKey() async {
-    try {
-      final userInfo = GStorage.userInfo.get('userInfoCache');
-      if (userInfo == null) return; // 未登录不续期
-      final int now = DateTime.now().millisecondsSinceEpoch;
-      final int lastSync = int.tryParse(
-              '${GStorage.localCache.get(LocalCacheKey.cookieSyncTs, defaultValue: 0)}') ??
-          0;
-      if (now - lastSync > _cookieSyncInterval) {
-        // 原版APK同款登录态云端同步：静默续签会话cookie（失败则回退cookieToKey流程）
-        final sync = await MemberHttp.cookieSync();
-        if (sync['status'] == true) {
-          await GStorage.localCache.put(LocalCacheKey.cookieSyncTs, now);
-        }
-      }
-      final dynamic ak =
-          GStorage.localCache.get(LocalCacheKey.accessKey, defaultValue: null);
-      final int ts = int.tryParse('${ak?['ts'] ?? 0}') ?? 0;
-      final int expiresIn =
-          int.tryParse('${ak?['expires_in'] ?? 0}') ?? (30 * 24 * 3600);
-      final bool needRenew = ak == null ||
-          '${ak['value'] ?? ''}'.isEmpty ||
-          '${ak['mid']}' != '${userInfo.mid}' ||
-          // 旧版本存储没有签发时间，视为需要续期一次
-          ts == 0 ||
-          DateTime.now().millisecondsSinceEpoch - ts >
-              (expiresIn - 5 * 24 * 3600) * 1000;
-      if (needRenew) {
-        await MemberHttp.cookieToKey(silent: true);
-      }
-    } catch (_) {
-      // 静默失败不影响使用，下次启动重试
-    }
+  void _loadScope() {
+    _saveSeen();
+    _seenWrite?.cancel();
+    _scope = _currentScope;
+    _seen = RecommendationSeen(
+        GStorage.localCache.get('recommendationSeenV2:$_scope'));
+    _seen.prune(DateTime.now().millisecondsSinceEpoch);
   }
 
-  /// 视频去重id：bvid优先，缺失则用aid兜底
-  static String _itemId(dynamic e) {
+  Future<void> _prepareKey() async {
+    if (defaultRcmdType != 'app') return;
+    final user = GStorage.userInfo.get('userInfoCache');
+    if (user == null) return;
+    final key = GStorage.localCache.get(LocalCacheKey.accessKey);
+    final ts = feedInt(key?['ts']) ?? 0;
+    final expires = feedInt(key?['expires_in']) ?? 30 * 86400;
+    final valid = key is Map &&
+        '${key['value'] ?? ''}'.isNotEmpty &&
+        '${key['mid']}' == '${user.mid}' &&
+        ts > 0 &&
+        DateTime.now().millisecondsSinceEpoch - ts <
+            (expires - 5 * 86400) * 1000;
+    if (valid) return;
     try {
-      final bvid = e.bvid;
-      if (bvid is String && bvid.isNotEmpty) return 'bv$bvid';
-      final aid = e.aid;
-      if (aid != null) return 'av$aid';
+      await MemberHttp.cookieToKey(silent: true)
+          .timeout(const Duration(seconds: 25));
     } catch (_) {}
-    return 'h${e.hashCode}';
   }
 
-  // 获取推荐
-  Future queryRcmdFeed(type) async {
-    if (isLoadingMore == false) {
-      return;
+  Future<Map<String, dynamic>> queryRcmdFeed(String type) {
+    final refresh = type == 'onRefresh';
+    if (_busy && !refresh)
+      return _pending ??
+          Future.value({'status': true, 'data': videoList.toList()});
+    if (_scope != _currentScope) {
+      _loadScope();
+      _cursor.reset();
+      videoList.clear();
     }
-    if (type == 'onRefresh') {
-      _currentPage = 0;
-    }
-    Map<String, dynamic> res = {'status': false, 'data': [], 'msg': '未知错误'};
-    List<dynamic> fresh = [];
-    // 最多拉两页：下拉刷新撞上服务器回同一批时，自动再往后取一页，不转圈白刷
-    for (int attempt = 0; attempt < 2; attempt++) {
-      switch (defaultRcmdType) {
-        case 'app':
-        case 'notLogin':
-          res = await VideoHttp.rcmdVideoListApp(
-            loginStatus: defaultRcmdType != 'notLogin',
-            freshIdx: _currentPage,
-          );
-          break;
-        default: //'web'
-          res = await VideoHttp.rcmdVideoList(
-            freshIdx: _currentPage,
-            ps: 20,
-          );
-      }
-      if (!res['status']) break;
-      fresh = (res['data'] as List)
-          .where((e) => !_seenIds.contains(_itemId(e)))
-          .toList();
-      // 非刷新直接用；刷新撞车（全是见过的）且当前列表非空时翻一页重试一次
-      if (type != 'onRefresh' || fresh.isNotEmpty || videoList.isEmpty) break;
-      _currentPage += 1;
-    }
-    if (res['status']) {
-      for (final e in fresh) {
-        _seenIds.add(_itemId(e));
-      }
-      if (type == 'init') {
-        if (videoList.isNotEmpty) {
-          videoList.addAll(fresh);
-        } else {
-          videoList.value = fresh;
-        }
-      } else if (type == 'onRefresh') {
-        if (enableSaveLastData) {
-          videoList.insertAll(0, fresh);
-        } else {
-          videoList.value = fresh;
-        }
-      } else if (type == 'onLoad') {
-        videoList.addAll(fresh);
-      }
-      _currentPage += 1;
-      // 若videoList数量太小，可能会影响翻页，此时再次请求
-      // 为避免请求到的数据太少时还在反复请求，要求本次返回数据大于1条才触发
-      if (fresh.length > 1 && videoList.length < 10) {
-        await queryRcmdFeed('onLoad');
-      }
-    } else if (type == 'onRefresh' || type == 'init') {
-      // 小票/登录失效给一句看得见的提示（上拉加载失败不打扰刷列表）
-      final String msg = '${res['msg'] ?? '请求失败'}';
-      SmartDialog.showToast(defaultRcmdType == 'app'
-          ? 'app端推荐失败：$msg，可尝试刷新access_key或切回web端'
-          : '推荐加载失败：$msg');
-    }
-    isLoadingMore = false;
-    return res;
+    _cancel?.cancel('recommendation superseded');
+    final token = _cancel = CancelToken();
+    final generation = ++_generation;
+    _busy = true;
+    isLoadingMore = true;
+    enableSaveLastData =
+        setting.get(SettingBoxKey.enableSaveLastData, defaultValue: false);
+    videoList.refresh();
+    return _pending = _run(type, generation, token, _scope);
   }
 
-  // 切换推荐类型（设置页调用）：清列表热切换，立即生效，无需重启
+  Future<Map<String, dynamic>> _run(
+      String type, int generation, CancelToken token, String scope) async {
+    final refresh = type == 'onRefresh';
+    final app = defaultRcmdType != 'web';
+    final mode = defaultRcmdType;
+    var result = <String, dynamic>{
+      'status': false,
+      'data': [],
+      'msg': '推荐请求失败'
+    };
+    final additions = <dynamic>[];
+    final excluded =
+        videoList.map(recommendationId).whereType<String>().toSet();
+    final now = DateTime.now().millisecondsSinceEpoch;
+    _seen.prune(now);
+    excluded.addAll(_seen.entries.keys);
+    bool current() =>
+        generation == _generation &&
+        scope == _currentScope &&
+        !token.isCancelled;
+    try {
+      await _keyReady;
+      if (!current()) return {'status': false, 'cancelled': true};
+      // Bounded filling, rather than recursively making unbounded page requests.
+      for (var attempt = 0; attempt < 3; attempt++) {
+        final pull = attempt == 0 && (refresh || type == 'init');
+        final flush = pull ? (refresh ? 6 : 0) : 8;
+        final requestIdx = _cursor.head;
+        final response = fetchOverride != null
+            ? await fetchOverride!(mode, requestIdx, pull, flush, token)
+            : app
+                ? await VideoHttp.rcmdVideoListApp(
+                    loginStatus: mode == 'app',
+                    idx: requestIdx,
+                    pull: pull,
+                    flush: flush,
+                    cancelToken: token)
+                : await VideoHttp.rcmdVideoList(freshIdx: _webFresh++, ps: 20);
+        if (!current()) return {'status': false, 'cancelled': true};
+        result = Map<String, dynamic>.from(response);
+        if (result['status'] != true) break;
+        if (app)
+          _cursor.accept(feedInt(result['headIdx']), feedInt(result['tailIdx']),
+              refresh: pull || _cursor.head == 0);
+        final batch =
+            uniqueRecommendations<dynamic>(result['data'] as List, excluded);
+        additions.addAll(batch);
+        excluded.addAll(batch.map(recommendationId).whereType<String>());
+        DiagLog.write(
+            '[RCMD_DEDUP] mode=$mode action=$type attempt=$attempt returned=${(result['data'] as List).length} new=${batch.length}');
+        if (additions.length >= 6) break;
+      }
+      if (!current()) return {'status': false, 'cancelled': true};
+      if (additions.isNotEmpty) {
+        if (refresh && !enableSaveLastData)
+          videoList.assignAll(additions);
+        else if (refresh)
+          videoList.insertAll(0, additions);
+        else
+          videoList.addAll(additions);
+        // Retained content is bounded; it is not duplicated by refresh.
+        if (videoList.length > 300)
+          videoList.removeRange(300, videoList.length);
+        return {'status': true, 'data': videoList.toList()};
+      }
+      if (result['status'] == true) {
+        if (refresh) SmartDialog.showToast('暂时没有新的推荐，已保留当前内容');
+        return {'status': true, 'data': videoList.toList()};
+      }
+      if (refresh || type == 'init')
+        SmartDialog.showToast('推荐加载失败：${result['msg']}');
+      return result;
+    } catch (_) {
+      return {'status': false, 'data': [], 'msg': '推荐加载失败'};
+    } finally {
+      if (generation == _generation) {
+        _busy = false;
+        isLoadingMore = false;
+        _pending = null;
+        videoList.refresh();
+      }
+    }
+  }
+
+  void exposed(dynamic item, {String? scope}) {
+    if (_scope != _currentScope || (scope != null && scope != _scope)) return;
+    final id = recommendationId(item);
+    if (id == null) return;
+    _seen.mark(id, DateTime.now().millisecondsSinceEpoch);
+    _seenWrite ??= Timer(const Duration(milliseconds: 500), () {
+      _seenWrite = null;
+      _saveSeen();
+    });
+  }
+
+  void _saveSeen() {
+    if (_scope.isEmpty) return;
+    GStorage.localCache
+        .put('recommendationSeenV2:$_scope',
+            Map<String, int>.from(_seen.entries))
+        .catchError((_) {});
+  }
+
   Future<void> switchRcmdType(String type) async {
+    _cancel?.cancel('recommendation type changed');
+    ++_generation;
+    _busy = false;
+    _pending = null;
     defaultRcmdType = type;
-    _currentPage = 0;
-    _seenIds.clear();
+    _cursor.reset();
+    _webFresh = 0;
+    _loadScope();
     videoList.clear();
-    isLoadingMore = true;
-    if (type == 'app') {
-      // 小票缺失/不对版时等一次续期（25秒上限，不卡死）；已有有效小票直接用
-      try {
-        await _ensureFreshAccessKey()
-            .timeout(const Duration(seconds: 25), onTimeout: () {});
-      } catch (_) {}
-    }
+    _keyReady = _prepareKey();
     await queryRcmdFeed('onRefresh');
   }
 
-  // 下拉刷新
-  Future onRefresh() async {
-    isLoadingMore = true;
-    await queryRcmdFeed('onRefresh');
+  Future onRefresh() => queryRcmdFeed('onRefresh');
+  Future onLoad() => queryRcmdFeed('onLoad');
+  void removeFeedbackItem(dynamic item) {
+    exposed(item);
+    final id = recommendationId(item);
+    videoList.removeWhere((e) => recommendationId(e) == id);
   }
 
-  // 上拉加载
-  Future onLoad() async {
-    await queryRcmdFeed('onLoad');
-  }
-
-  // 返回顶部
-  void animateToTop() async {
-    if (scrollController.offset >=
-        MediaQuery.of(Get.context!).size.height * 5) {
-      scrollController.jumpTo(0);
-    } else {
-      await scrollController.animateTo(0,
-          duration: const Duration(milliseconds: 500), curve: Curves.easeInOut);
-    }
+  void animateToTop() {
+    if (!scrollController.hasClients) return;
+    scrollController.animateTo(0,
+        duration: const Duration(milliseconds: 500), curve: Curves.easeInOut);
   }
 
   void blockUserCb(mid) {
-    videoList.removeWhere((e) => e.owner.mid == mid);
-    videoList.refresh();
+    videoList.removeWhere((e) => e.owner?.mid == mid);
     SmartDialog.showToast('已移除相关视频');
+  }
+
+  @override
+  void onClose() {
+    _cancel?.cancel('recommendation closed');
+    ++_generation;
+    _seenWrite?.cancel();
+    _saveSeen();
+    scrollController.dispose();
+    super.onClose();
   }
 }

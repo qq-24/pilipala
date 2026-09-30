@@ -1,6 +1,12 @@
 import 'dart:convert';
 import 'dart:developer';
+import 'package:device_info_plus/device_info_plus.dart';
+import 'package:flutter/material.dart';
+import 'package:get/get.dart' hide Response, FormData;
+import 'recommendation_request.dart';
+import '../utils/recommendation_state.dart';
 import 'package:dio/dio.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:hive/hive.dart';
 import 'package:pilipala/utils/id_utils.dart';
 import 'package:pilipala/models/video/tags.dart';
@@ -73,236 +79,197 @@ class VideoHttp {
     }
   }
 
-  // 添加额外的loginState变量模拟未登录状态
-  static Future rcmdVideoListApp(
-      {bool loginStatus = true, required int freshIdx}) async {
-    List<RecVideoItemAppModel> parseItems(dynamic body) {
-      final List<RecVideoItemAppModel> list = [];
-      if (body is! Map) return list;
-      List<int> blackMidsList =
-          setting.get(SettingBoxKey.blackMidsList, defaultValue: [-1]);
-      for (var i in body['data']['items']) {
-        // 屏蔽推广和拉黑用户
-        if (i['card_goto'] != 'ad_av' &&
-            i['card_goto'] != 'ad_web_s' &&
-            i['card_goto'] != 'ad_web' &&
-            (!enableRcmdDynamic ? i['card_goto'] != 'picture' : true) &&
-            (i['args'] != null &&
-                !blackMidsList.contains(i['args']['up_mid']))) {
-          RecVideoItemAppModel videoItem = RecVideoItemAppModel.fromJson(i);
-          if (!RecommendFilter.filter(videoItem)) {
-            list.add(videoItem);
-          }
-        }
-      }
-      return list;
-    }
-
-    Future<Map<String, dynamic>> fetch(Map<String, dynamic> params) async {
-      try {
-        var res = await Request().get(Api.recommendListApp, data: params);
-        if (res.data['code'] == 0) {
-          return {'status': true, 'data': parseItems(res.data)};
-        }
-        return {'status': false, 'data': [], 'msg': res.data['message']};
-      } catch (err) {
-        return {'status': false, 'data': [], 'msg': err.toString()};
-      }
-    }
-
-    final String pull = freshIdx == 0 ? 'true' : 'false';
-    final String accessKey = loginStatus
-        ? (localCache.get(LocalCacheKey.accessKey, defaultValue: {})['value'] ??
-            '')
+  static String? _deviceModel;
+  static Future<Map<String, dynamic>> rcmdVideoListApp(
+      {bool loginStatus = true,
+      int idx = 0,
+      bool pull = true,
+      int flush = 0,
+      CancelToken? cancelToken}) async {
+    final key = loginStatus
+        ? '${localCache.get(LocalCacheKey.accessKey, defaultValue: {})['value'] ?? ''}'
         : '';
-    // 先走官方签名形态（与诊断页已验证的签名分支同形）；服务端不认则回退原形态，
-    // 保证失败时不比以前差
-    final Map<String, dynamic> signed = {
-      'idx': '$freshIdx',
-      'flush': '5',
-      'column': '4',
-      'device': 'pad',
-      'device_type': '0',
-      'device_name': 'vivo',
-      'pull': pull,
-      'appkey': Constants.appKey,
-      'access_key': accessKey,
-      'ts': '${DateTime.now().millisecondsSinceEpoch ~/ 1000}',
-    };
-    signed['sign'] =
-        Utils.appSign(Map<String, dynamic>.from(signed), Constants.appKey, Constants.appSec);
-    final signedRes = await fetch(signed);
-    if (signedRes['status']) return signedRes;
-    return fetch({
-      'idx': freshIdx,
-      'flush': '5',
-      'column': '4',
-      'device': 'pad',
-      'device_type': 0,
-      'device_name': 'vivo',
-      'pull': freshIdx == 0 ? 'true' : 'false',
-      'appkey': Constants.appKey,
-      'access_key': loginStatus
-          ? (localCache
-                  .get(LocalCacheKey.accessKey, defaultValue: {})['value'] ??
-              '')
-          : ''
-    });
-  }
-
-  // 诊断app端推荐登录态 v3（证据版）
-  // live = 与首页完全一致的请求（key+全局cookie）；guest = 独立裸Dio真游客（无cookie无key）
-  // 串行请求、各自独立idx，避免并发同idx触发风控；并展示双方标题供目核
-  static Future diagnoseAppRcmd() async {
-    final int base =
-        DateTime.now().millisecondsSinceEpoch ~/ 1000 % 99990000;
-
-    Map<String, dynamic> parseBody(dynamic body) {
-      if (body is! Map) {
-        final String s = body?.toString() ?? 'null';
-        return {
-          'code': -99,
-          'msg': '非JSON: ${s.substring(0, s.length < 60 ? s.length : 60)}',
-          'aids': <int>{},
-          'titles': <String>[],
-        };
-      }
-      final int code = int.tryParse('${body['code']}') ?? -1;
-      if (code != 0) {
-        return {
-          'code': code,
-          'msg': body['message'],
-          'aids': <int>{},
-          'titles': <String>[]
-        };
-      }
-      final Set<int> aids = {};
-      final List<String> titles = [];
-      for (var i in (body['data']?['items'] ?? [])) {
-        final int aid = int.tryParse('${i['args']?['idy']}') ?? -1;
-        if (aid > 0) {
-          aids.add(aid);
-        }
-        final String t = '${i['title'] ?? ''}';
-        if (t.isNotEmpty) {
-          titles.add(t.length > 28 ? '${t.substring(0, 28)}…' : t);
-        }
-      }
-      return {'code': 0, 'msg': 'OK', 'aids': aids, 'titles': titles};
-    }
-
-    Map<String, dynamic> errResult(Object e) => {
-          'code': -98,
-          'msg': '请求异常: $e',
-          'aids': <int>{},
-          'titles': <String>[]
-        };
-
-    Future<Map<String, dynamic>> fetchViaApp(Map<String, dynamic> params) async {
-      try {
-        var res = await Request().get(Api.recommendListApp, data: params);
-        return parseBody(res.data);
-      } catch (e) {
-        return errResult(e);
-      }
-    }
-
-    Future<Map<String, dynamic>> fetchTrueGuest(int idx) async {
-      Dio? bare;
-      try {
-        bare = Dio(BaseOptions(
-          connectTimeout: const Duration(seconds: 12),
-          receiveTimeout: const Duration(seconds: 12),
-          headers: const {
-            'user-agent':
-                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          },
-        ));
-        var res = await bare.getUri(
-            Uri.https('app.bilibili.com', '/x/v2/feed/index', {
-          'idx': '$idx',
-          'flush': '5',
-          'column': '4',
-          'device': 'pad',
-          'device_type': '0',
-          'device_name': 'vivo',
-          'pull': 'true',
-          'appkey': Constants.appKey,
-          'access_key': '',
-        }));
-        return parseBody(res.data);
-      } catch (e) {
-        return errResult(e);
-      } finally {
-        bare?.close(force: true);
-      }
-    }
-
+    final account = loginStatus ? '${userInfoCache.get('userInfoCache')?.mid ?? ''}' : null;
+    if (loginStatus && key.isEmpty)
+      return {
+        'status': false,
+        'data': [],
+        'msg': '缺少 App token，请刷新 access_key'
+      };
     try {
-      final String key =
-          localCache.get(LocalCacheKey.accessKey, defaultValue: {})['value'] ??
-              '';
-      if (key.isEmpty) {
+      _deviceModel ??= (await DeviceInfoPlugin().androidInfo).model;
+    } catch (_) {
+      _deviceModel ??= 'android';
+    }
+    final context = Get.context;
+    final pad =
+        context != null && MediaQuery.sizeOf(context).shortestSide >= 600;
+    final params = appFeedParams(
+        idx: idx,
+        pull: pull,
+        flush: flush,
+        key: key,
+        device: pad ? 'pad' : 'phone',
+        model: _deviceModel!);
+    try {
+      final network = await Connectivity().checkConnectivity();
+      params['network'] = network.contains(ConnectivityResult.wifi) ? 'wifi' : network.contains(ConnectivityResult.mobile) ? 'mobile' : '';
+    } catch (_) { params['network'] = ''; }
+    params['appkey'] = Constants.appKey;
+    params['ts'] = '${DateTime.now().millisecondsSinceEpoch ~/ 1000}';
+    params['sign'] = Utils.appSign(
+        Map<String, dynamic>.from(params), Constants.appKey, Constants.appSec);
+    Dio? guest;
+    try {
+      final buvid = await Request.getBuvid();
+      final headers = <String, dynamic>{if (buvid.isNotEmpty) 'buvid': buvid};
+      final Response res;
+      if (loginStatus) {
+        res = await Request().get(Api.recommendListApp,
+            data: params,
+            options: Options(headers: headers),
+            cancelToken: cancelToken);
+      } else {
+        // A true guest must not inherit the singleton client's login cookies.
+        guest = Dio(BaseOptions(
+            connectTimeout: const Duration(seconds: 12),
+            receiveTimeout: const Duration(seconds: 12)));
+        res = await guest.get(Api.recommendListApp,
+            queryParameters: params,
+            options: Options(headers: headers),
+            cancelToken: cancelToken);
+      }
+      final body = res.data;
+      if (body is! Map || body['code'] != 0)
         return {
           'status': false,
-          'msg': '未获取到access_key，请先在「隐私设置」点“刷新access_key”后再诊断'
+          'data': [],
+          'msg': body is Map ? body['message'] ?? '请求失败' : '接口返回异常'
         };
+      final meta = appFeedMeta(body);
+      final black =
+          setting.get(SettingBoxKey.blackMidsList, defaultValue: [-1]) as List;
+      final dynamics =
+          setting.get(SettingBoxKey.enableRcmdDynamic, defaultValue: true);
+      final list = <RecVideoItemAppModel>[];
+      int parseErrors = 0;
+      for (final value in (body['data']?['items'] ?? [])) {
+        if (value is! Map) continue;
+        final item = Map<String, dynamic>.from(value);
+        final goto = item['goto'] ?? item['card_goto'];
+        final cardGoto = '${item['card_goto'] ?? ''}';
+        if (!['av', 'bangumi', 'picture'].contains(goto) ||
+            cardGoto.startsWith('ad_') ||
+            item['ad_info'] != null ||
+            (!dynamics && goto == 'picture') ||
+            black.contains(
+                feedInt(item['args']?['up_id'] ?? item['args']?['up_mid'])))
+          continue;
+        try {
+          final model = RecVideoItemAppModel.fromJson(item);
+          model.feedAccount = account;
+          if (!RecommendFilter.filter(model)) list.add(model);
+        } catch (_) {
+          parseErrors++;
+        }
       }
-      const Map<String, dynamic> common = {
-        'flush': '5',
-        'column': '4',
-        'device': 'pad',
-        'device_type': '0',
-        'device_name': 'vivo',
-        'pull': 'true',
-        'appkey': Constants.appKey,
-      };
-      // 串行 + 各自独立idx，避免并发同idx被风控
-      final live = await fetchViaApp({
-        ...common,
-        'idx': '${base + 1}',
-        'access_key': key,
-      });
-      final signedParams = <String, dynamic>{
-        ...common,
-        'idx': '${base + 2}',
-        'access_key': key,
-        'ts': '${DateTime.now().millisecondsSinceEpoch ~/ 1000}',
-      };
-      signedParams['sign'] =
-          Utils.appSign(signedParams, Constants.appKey, Constants.appSec);
-      final signed = await fetchViaApp(signedParams);
-      var guest = await fetchTrueGuest(base + 3);
-      if (guest['code'] != 0) {
-        await Future.delayed(const Duration(milliseconds: 800));
-        guest = await fetchTrueGuest(base + 4); // 换idx重试一次
-      }
-      if (live['code'] != 0) {
-        return {
-          'status': false,
-          'msg': '当前推荐请求失败（code=${live['code']} ${live['msg']}），请稍后重试'
-        };
-      }
-      double overlap(Map<String, dynamic> a, Map<String, dynamic> b) {
-        final Set<int> x = a['aids'];
-        final Set<int> y = b['aids'];
-        return x.isEmpty ? 0 : x.intersection(y).length / x.length;
-      }
-
+      DiagLog.write(
+          '[RCMD] app idx=$idx pull=$pull flush=$flush raw=${meta['rawCount']} filtered=${list.length} parseErrors=$parseErrors pegasus=${meta['pegasusCode']}');
       return {
         'status': true,
-        'guestOk': guest['code'] == 0 && (guest['aids'] as Set).isNotEmpty,
-        'guestErr': '${guest['code']} ${guest['msg']}',
-        'overlap': overlap(live, guest),
-        'signedOverlap': overlap(signed, guest),
-        'signedCode': signed['code'],
-        'liveCount': (live['aids'] as Set).length,
-        'liveTitles': (live['titles'] as List).take(6).toList(),
-        'guestTitles': (guest['titles'] as List).take(6).toList(),
+        'data': list,
+        ...meta,
+        'parseErrors': parseErrors
       };
-    } catch (err) {
-      log('diagnoseAppRcmd exception: $err');
-      return {'status': false, 'msg': '诊断异常：$err'};
+    } catch (e) {
+      return {
+        'status': false,
+        'data': [],
+        'cancelled': cancelToken?.isCancelled == true,
+        'msg': '推荐请求失败'
+      };
+    } finally {
+      guest?.close(force: true);
+    }
+  }
+
+  /// Independent token identity verification; recommendation overlap is not an auth test.
+  static Future<Map<String, dynamic>> diagnoseAppRcmd() async {
+    final key =
+        '${localCache.get(LocalCacheKey.accessKey, defaultValue: {})['value'] ?? ''}';
+    final user = userInfoCache.get('userInfoCache');
+    if (key.isEmpty) return {'status': false, 'msg': '未获取到 access_key'};
+    final bare = Dio(BaseOptions(
+        connectTimeout: const Duration(seconds: 12),
+        receiveTimeout: const Duration(seconds: 12)));
+    try {
+      final params = <String, dynamic>{
+        'access_token': key,
+        'appkey': Constants.appKey,
+        'ts': '${DateTime.now().millisecondsSinceEpoch ~/ 1000}'
+      };
+      params['sign'] = Utils.appSign(Map<String, dynamic>.from(params),
+          Constants.appKey, Constants.appSec);
+      final identity = await bare.get(
+          'https://passport.bilibili.com/api/v2/oauth2/info',
+          queryParameters: params);
+      final body = identity.data;
+      final serverMid = body is Map && body['data'] is Map ? feedInt(body['data']['mid']) : null;
+      final valid = body is Map && body['code'] == 0 && serverMid != null && serverMid > 0 &&
+          '${body['data']?['mid']}' == '${user?.mid}';
+      final feed = await rcmdVideoListApp();
+      final items = feed['data'] as List;
+      final ids = feed['rawIds'] as List? ?? [];
+      return {
+        'status': true,
+        'tokenValid': valid,
+        'feedStatus': feed['status'], 'rawCount': feed['rawCount'], 'filteredCount': items.length,
+        'msg': '服务器验证 token：${valid ? '有效，且属于当前账号' : '未确认有效，请检查登录'}\n'
+            '推荐请求：${feed['status'] == true ? '成功' : '失败'}\n'
+            '原始 ${feed['rawCount'] ?? 0} 条，视频 ${ids.length} 个，唯一视频 ${ids.toSet().length} 个；过滤后 ${items.length} 条\n'
+            '推荐内部状态：${feed['pegasusCode'] ?? '未返回异常状态'}\n'
+            '以上验证账号、接口和重复情况，不证明与官方推荐质量等效。',
+        'liveTitles': items.take(6).map((e) => '${e.title}').toList()
+      };
+    } catch (_) {
+      return {'status': false, 'msg': '账号验证请求失败，无法判定'};
+    } finally {
+      bare.close(force: true);
+    }
+  }
+
+  static Future<Map<String, dynamic>> feedDislike(
+      RecVideoItemAppModel item, int reasonId) async {
+    if (item.feedAccount != '${userInfoCache.get('userInfoCache')?.mid ?? ''}')
+      return {'status': false, 'msg': '账号已变化，请刷新推荐后重试'};
+    final key =
+        '${localCache.get(LocalCacheKey.accessKey, defaultValue: {})['value'] ?? ''}';
+    if (key.isEmpty) return {'status': false, 'msg': '需要有效的 App token'};
+    final params = <String, dynamic>{
+      'id': '${item.param ?? item.aid ?? ''}',
+      'goto': item.reportFields['goto'],
+      'reason_id': '$reasonId',
+      'access_key': key,
+      'appkey': Constants.appKey,
+      'build': '9130500',
+      'mobi_app': 'android',
+      'track_id': item.trackId ?? '',
+      'spmid': 'tm.recommend.0.0',
+      if (item.reportFields['report_data'] != null)
+        'report_data': item.reportFields['report_data'],
+      'ts': '${DateTime.now().millisecondsSinceEpoch ~/ 1000}'
+    };
+    params['sign'] = Utils.appSign(
+        Map<String, dynamic>.from(params), Constants.appKey, Constants.appSec);
+    try {
+      final res = await Request()
+          .get('https://app.bilibili.com/x/feed/dislike', data: params);
+      final ok = res.data is Map && res.data['code'] == 0;
+      DiagLog.write(
+          '[RCMD_FEEDBACK] dislike aid=${item.aid} code=${res.data is Map ? res.data['code'] : 'non-json'}');
+      return {'status': ok, 'msg': ok ? '已反馈，将减少相似内容推荐' : '反馈未成功，请稍后重试'};
+    } catch (_) {
+      return {'status': false, 'msg': '反馈请求失败'};
     }
   }
 
@@ -640,7 +607,12 @@ class VideoHttp {
   }
 
   // 视频播放进度
-  static Future heartBeat({bvid, cid, progress, realtime}) async {
+  static Future heartBeat(
+      {bvid,
+      cid,
+      progress,
+      realtime,
+      Map<String, String>? recommendationContext}) async {
     await Request().post(
       Api.heartBeat,
       data: {
@@ -651,6 +623,11 @@ class VideoHttp {
         // 'sid': '',
         // 'mid': '',
         'played_time': progress,
+        if (recommendationContext != null) ...{
+          'from_spmid': recommendationContext['from_spmid'],
+          'spmid': '333.788.0.0',
+          'trackid': recommendationContext['track_id'],
+        },
         // 'realtime': realtime,
         // 'type': '',
         // 'sub_type': '',
